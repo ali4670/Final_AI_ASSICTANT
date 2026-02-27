@@ -13,12 +13,12 @@ interface HomeProps {
 const Home: React.FC<HomeProps> = ({ onNavigate }) => {
     return (
         <div className="relative">
-            <Navbar />
+            <Navbar onNavigate={onNavigate} />
             <FloatingLetters />
 
             <Hero onNavigate={onNavigate} />
 
-            <WhyChooseUs />
+            <WhyChooseUs onNavigate={onNavigate} />
 
         </div>
     );

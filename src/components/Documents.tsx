@@ -2,7 +2,7 @@ import { useState, useEffect, ChangeEvent } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { parseFile } from '../lib/fileParser';
-import { ArrowLeft, FileText, Trash2, MessageSquare, CreditCard, Brain, Loader, FileUp, Search, Plus, Table, FileCode } from 'lucide-react';
+import { ArrowLeft, FileText, Trash2, MessageSquare, CreditCard, Brain, Loader, FileUp, Search, Plus, Table, FileCode, AlertCircle } from 'lucide-react';
 
 export default function Documents({ onNavigate }: { onNavigate: (p: string, id?: string) => void }) {
   const { user } = useAuth();
@@ -13,13 +13,20 @@ export default function Documents({ onNavigate }: { onNavigate: (p: string, id?:
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [search, setSearch] = useState('');
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => { fetchDocs(); }, [user]);
 
   const fetchDocs = async () => {
-    const { data } = await supabase.from('documents').select('*').order('created_at', { ascending: false });
-    if (data) setDocs(data);
-    setLoading(false);
+    try {
+      const { data, error } = await supabase.from('documents').select('*').order('created_at', { ascending: false });
+      if (error) throw error;
+      if (data) setDocs(data);
+    } catch (err: any) {
+      setErrorMsg("Failed to load documents. Please check your connection.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleUpload = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -35,29 +42,54 @@ export default function Documents({ onNavigate }: { onNavigate: (p: string, id?:
   };
 
   const saveToDB = async () => {
+    setUploading(true);
     const { data, error } = await supabase.from('documents').insert([{
       user_id: user?.id, title, content, file_type: title.split('.').pop()
     }]).select().single();
-    if (!error) { setDocs([data, ...docs]); setTitle(''); setContent(''); }
+    
+    if (!error && data) { 
+      setDocs([data, ...docs]); 
+      setTitle(''); 
+      setContent(''); 
+      
+      // Index for RAG
+      try {
+        await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:4000'}/api/index-document`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ documentId: data.id, content: data.content, userId: user?.id }),
+        });
+      } catch (err) {
+        console.error("Indexing failed", err);
+      }
+    }
     else alert(error.message);
+    setUploading(false);
   };
 
   const generateCards = async (doc: any) => {
     setGenerating(doc.id);
     try {
-      const res = await fetch('http://localhost:4000/api/generate-cards', {
+      const response = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:4000'}/api/generate-cards`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ documentContent: doc.content, title: doc.title }),
+        body: JSON.stringify({ documentContent: doc.content, title: doc.title, documentId: doc.id }),
       });
-      const aiCards = await res.json();
+
+      if (!response.ok) throw new Error('Failed to generate cards');
+      
+      const aiCards = await response.json();
+
       await supabase.from('flashcards').insert(aiCards.map((c: any) => ({
         ...c, user_id: user?.id, document_id: doc.id, difficulty: 'easy'
       })));
 
       // Navigate specifically to this document's cards
       onNavigate('flashcards', doc.id);
-    } catch (err) { alert("Server Error"); }
+    } catch (err) { 
+      console.error('Generation error:', err);
+      alert("Server Error during flashcard generation"); 
+    }
     setGenerating(null);
   };
 
@@ -92,7 +124,30 @@ export default function Documents({ onNavigate }: { onNavigate: (p: string, id?:
           </aside>
 
           <section className="lg:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-4">
-            {filtered.map(doc => (
+            {errorMsg && (
+                <div className="col-span-full bg-red-50 border border-red-100 text-red-600 p-4 rounded-xl flex items-center gap-3 mb-4">
+                  <AlertCircle size={20} />
+                  <p className="font-medium">{errorMsg}</p>
+                  <button onClick={() => { setErrorMsg(null); fetchDocs(); }} className="ml-auto text-xs font-bold uppercase underline">Retry</button>
+                </div>
+            )}
+            {loading ? (
+                Array(4).fill(0).map((_, i) => (
+                    <div key={i} className="bg-white p-6 rounded-2xl border animate-pulse">
+                      <div className="flex justify-between mb-4">
+                        <div className="w-10 h-10 bg-slate-100 rounded-lg"></div>
+                        <div className="w-4 h-4 bg-slate-100 rounded"></div>
+                      </div>
+                      <div className="h-6 bg-slate-100 rounded w-3/4 mb-6"></div>
+                      <div className="flex gap-2">
+                        <div className="flex-1 h-10 bg-slate-50 rounded-xl"></div>
+                        <div className="flex-1 h-10 bg-slate-50 rounded-xl"></div>
+                        <div className="flex-1 h-10 bg-slate-50 rounded-xl"></div>
+                      </div>
+                    </div>
+                ))
+            ) : filtered.length > 0 ? (
+                filtered.map(doc => (
                 <div key={doc.id} className="bg-white p-6 rounded-2xl border hover:shadow-xl transition-all group">
                   <div className="flex justify-between mb-4">
                     <div className="p-2 bg-slate-50 rounded-lg group-hover:bg-blue-50">
@@ -110,7 +165,7 @@ export default function Documents({ onNavigate }: { onNavigate: (p: string, id?:
                       <span className="text-[9px] font-black uppercase">Cards</span>
                     </button>
                     <button
-                        onClick={() => onNavigate('quizzes', doc.id)} // CHANGED THIS LINE
+                        onClick={() => onNavigate('quizzes', doc.id)}
                         className="flex-1 bg-slate-50 hover:bg-purple-50 p-2 rounded-xl flex flex-col items-center gap-1"
                     >
                       <Brain size={16} />
@@ -118,7 +173,16 @@ export default function Documents({ onNavigate }: { onNavigate: (p: string, id?:
                     </button>
                   </div>
                 </div>
-            ))}
+                ))
+            ) : (
+                <div className="col-span-full py-20 text-center">
+                  <div className="bg-slate-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <FileText className="text-slate-300" size={32} />
+                  </div>
+                  <h3 className="font-bold text-slate-800">Your library is empty</h3>
+                  <p className="text-slate-500 text-sm mt-1">Upload your first document to get started</p>
+                </div>
+            )}
           </section>
         </main>
       </div>

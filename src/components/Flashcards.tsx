@@ -50,7 +50,7 @@ export default function Flashcards({ onNavigate, documentId }: { onNavigate: (p:
       const { data: doc } = await supabase.from('documents').select('content, title').eq('id', documentId).single();
       if (!doc) return;
 
-      const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/generate-cards`, {
+      const response = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:4000'}/api/generate-cards`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

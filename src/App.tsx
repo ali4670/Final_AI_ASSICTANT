@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 
 import Login from './components/Login';
 import Signup from './components/Signup';
@@ -26,6 +27,7 @@ export type Page =
 
 function AppContent() {
     const { user, loading } = useAuth();
+    const { theme } = useTheme();
     const [isLogin, setIsLogin] = useState(true);
     const [currentPage, setCurrentPage] = useState<Page>('home');
     const [selectedDocumentId, setSelectedDocumentId] = useState<string | undefined>();
@@ -39,8 +41,12 @@ function AppContent() {
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-                <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600"></div>
+            <div className={`min-h-screen flex items-center justify-center transition-colors duration-700 ${
+                theme === 'dark' ? 'bg-[#050505]' : 'bg-blue-50'
+            }`}>
+                <div className={`animate-spin rounded-full h-16 w-16 border-b-2 ${
+                    theme === 'dark' ? 'border-blue-500' : 'border-blue-600'
+                }`}></div>
             </div>
         );
     }
@@ -53,40 +59,48 @@ function AppContent() {
         );
     }
 
-    switch (currentPage) {
-        case 'home':
-            return <Home onNavigate={handleNavigate} />;
+    return (
+        <div className={`transition-colors duration-700 ${theme === 'dark' ? 'dark bg-[#050505]' : 'bg-white'}`}>
+            {(() => {
+                switch (currentPage) {
+                    case 'home':
+                        return <Home onNavigate={handleNavigate} />;
 
-        case 'dashboard':
-            return <Dashboard onNavigate={handleNavigate} />;
+                    case 'dashboard':
+                        return <Dashboard onNavigate={handleNavigate} />;
 
-        case 'studyTimeline':
-            return <StudyTimeline onNavigate={handleNavigate} />;
+                    case 'studyTimeline':
+                        return <StudyTimeline onNavigate={handleNavigate} />;
 
-        case 'about':
-            return <About onNavigate={handleNavigate}/>;
+                    case 'about':
+                        return <About onNavigate={handleNavigate}/>;
 
-        case 'documents':
-            return <Documents onNavigate={handleNavigate} />;
+                    case 'documents':
+                        return <Documents onNavigate={handleNavigate} />;
 
-        case 'chat':
-            return <Chat onNavigate={handleNavigate} documentId={selectedDocumentId} />;
+                    case 'chat':
+                        return <Chat onNavigate={handleNavigate} documentId={selectedDocumentId} />;
 
-        case 'flashcards':
-            return <Flashcards onNavigate={handleNavigate} documentId={selectedDocumentId} />;
+                    case 'flashcards':
+                        return <Flashcards onNavigate={handleNavigate} documentId={selectedDocumentId} />;
 
-        case 'quizzes':
-            return <Quizzes onNavigate={handleNavigate} documentId={selectedDocumentId} />;
+                    case 'quizzes':
+                        return <Quizzes onNavigate={handleNavigate} documentId={selectedDocumentId} />;
 
-        default:
-            return <Dashboard onNavigate={handleNavigate} />;
-    }
+                    default:
+                        return <Dashboard onNavigate={handleNavigate} />;
+                }
+            })()}
+        </div>
+    );
 }
 
 function App() {
     return (
         <AuthProvider>
-            <AppContent />
+            <ThemeProvider>
+                <AppContent />
+            </ThemeProvider>
         </AuthProvider>
     );
 }

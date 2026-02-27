@@ -30,18 +30,32 @@ export default function StudyProfile({ onNavigate }: Props) {
         setSubjects(updated);
     };
 
-    const handleSubmit = async () => {
-        const res = await fetch("http://localhost:4000/save-study", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                age: Number(age),
-                subjects,
-            }),
-        });
+    const [loading, setLoading] = useState(false);
 
-        const data = await res.json();
-        alert(data.message);
+    const handleSubmit = async () => {
+        if (!age || subjects.length === 0) {
+            alert("Please fill in your age and add at least one subject.");
+            return;
+        }
+        setLoading(true);
+        try {
+            const res = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:4000'}/api/save-study`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    age: Number(age),
+                    subjects,
+                }),
+            });
+
+            const data = await res.json();
+            alert(data.message);
+            onNavigate("dashboard");
+        } catch (err) {
+            alert("Failed to save profile. Check if backend is running.");
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -138,9 +152,10 @@ export default function StudyProfile({ onNavigate }: Props) {
 
                 <button
                     onClick={handleSubmit}
-                    className="px-6 py-3 bg-blue-600 text-white rounded-lg w-full"
+                    disabled={loading}
+                    className="px-6 py-3 bg-blue-600 text-white rounded-lg w-full flex items-center justify-center gap-2 disabled:bg-blue-300"
                 >
-                    Save Profile
+                    {loading ? "Saving..." : "Save Profile"}
                 </button>
             </div>
         </div>

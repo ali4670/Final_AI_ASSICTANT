@@ -1,3 +1,65 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+  }
+}
+
+@layer utilities {
+  .perspective-1000 {
+    perspective: 1000px;
+  }
+  .transform-style-3d {
+    transform-style: preserve-3d;
+  }
+  .backface-hidden {
+    backface-visibility: hidden;
+  }
+  .rotate-y-180 {
+    transform: rotateY(180deg);
+  }
+}
+
+body {
+  @apply transition-colors duration-700 font-sans antialiased;
+}
+
+/* Custom Scrollbar for Lando Norris Aesthetic */
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-[#050505];
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-blue-600/20 border-2 border-transparent bg-clip-content rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-blue-500/40;
+}
+
+/* Lando Norris Neon Glows */
+.neon-glow-blue {
+  box-shadow: 0 0 15px rgba(59, 130, 246, 0.5);
+}
+
+.neon-glow-indigo {
+  box-shadow: 0 0 15px rgba(99, 102, 241, 0.5);
+}
+
+/* RTL Support */
+[dir="rtl"] {
+  font-family: 'Inter', 'Noto Sans Arabic', sans-serif;
+}

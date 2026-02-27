@@ -45,27 +45,64 @@ export default function Chat({ onNavigate, documentId }: { onNavigate: (p: strin
         if (!input.trim() || !selectedDoc || loading) return;
 
         const userMsg: Message = { role: 'user', content: input.trim() };
-        setMessages(prev => [...prev, userMsg]);
+        setMessages(prev => [...prev, userMsg, { role: 'assistant', content: '' }]);
+        const currentMsgIndex = messages.length + 1;
         setInput('');
         setLoading(true);
 
         try {
-            const response = await fetch('http://localhost:4000/api/chat', {
+            const response = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:4000'}/api/chat`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     message: userMsg.content,
                     documentContent: selectedDoc.content,
                     conversationHistory: messages.slice(-6),
+                    documentId: selectedDoc.id
                 }),
             });
 
-            const data = await response.json();
-            if (data.error) throw new Error(data.error);
+            if (!response.body) throw new Error('No response body');
+            
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let accumulatedContent = '';
 
-            setMessages(prev => [...prev, { role: 'assistant', content: data.response }]);
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value, { stream: true });
+                const lines = chunk.split('\n');
+
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        const dataStr = line.slice(6);
+                        if (dataStr === '[DONE]') continue;
+                        try {
+                            const data = JSON.parse(dataStr);
+                            if (data.error) throw new Error(data.error);
+                            if (data.content) {
+                                accumulatedContent += data.content;
+                                setMessages(prev => {
+                                    const newMsgs = [...prev];
+                                    newMsgs[currentMsgIndex] = { role: 'assistant', content: accumulatedContent };
+                                    return newMsgs;
+                                });
+                            }
+                        } catch (e) {
+                            console.error('Error parsing SSE data', e);
+                        }
+                    }
+                }
+            }
         } catch (err) {
-            setMessages(prev => [...prev, { role: 'assistant', content: "Error: AI took too long or server is down." }]);
+            console.error('Chat error:', err);
+            setMessages(prev => {
+                const newMsgs = [...prev];
+                newMsgs[currentMsgIndex] = { role: 'assistant', content: "Error: AI took too long or server is down." };
+                return newMsgs;
+            });
         } finally {
             setLoading(false);
         }
