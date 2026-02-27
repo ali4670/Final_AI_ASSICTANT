@@ -4,13 +4,14 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "concurrently \"vite\" \"node server/index.js\"",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.app.json"
   },
   "dependencies": {
+    "concurrently": "^9.1.2",
     "@google/genai": "^1.42.0",
     "@supabase/supabase-js": "^2.97.0",
     "@tanstack/react-query": "^5.84.1",
