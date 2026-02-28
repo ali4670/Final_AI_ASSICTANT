@@ -2,10 +2,16 @@ import { useState, useEffect, ChangeEvent } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { parseFile } from '../lib/fileParser';
-import { ArrowLeft, FileText, Trash2, MessageSquare, CreditCard, Brain, Loader, FileUp, Search, Plus, Table, FileCode, AlertCircle } from 'lucide-react';
+import { ArrowLeft, FileText, Trash2, MessageSquare, CreditCard, Brain, Loader, FileUp, Search, Plus, FileCode, AlertCircle, Sparkles, CheckCircle2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useTheme } from '../contexts/ThemeContext';
+import { StudentLibrarian } from './AnimatedVisual';
+import { translations } from '../utils/translations';
 
 export default function Documents({ onNavigate }: { onNavigate: (p: string, id?: string) => void }) {
   const { user } = useAuth();
+  const { theme, language } = useTheme();
+  const t = translations[language].library;
   const [docs, setDocs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -14,6 +20,9 @@ export default function Documents({ onNavigate }: { onNavigate: (p: string, id?:
   const [content, setContent] = useState('');
   const [search, setSearch] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   useEffect(() => { fetchDocs(); }, [user]);
 
@@ -33,11 +42,17 @@ export default function Documents({ onNavigate }: { onNavigate: (p: string, id?:
     const file = e.target.files?.[0];
     if (!file) return;
     setUploading(true);
+    setUploadProgress(20);
     try {
       const res = await parseFile(file);
+      setUploadProgress(80);
       setTitle(file.name);
       setContent(res.content);
-    } catch (err: any) { alert(err.message); }
+      setUploadProgress(100);
+    } catch (err: any) { 
+        alert(err.message); 
+        setUploadProgress(0);
+    }
     setUploading(false);
   };
 
@@ -51,8 +66,9 @@ export default function Documents({ onNavigate }: { onNavigate: (p: string, id?:
       setDocs([data, ...docs]); 
       setTitle(''); 
       setContent(''); 
+      setSuccessMsg("Document committed successfully.");
+      setTimeout(() => setSuccessMsg(null), 3000);
       
-      // Index for RAG
       try {
         await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:4000'}/api/index-document`, {
           method: 'POST',
@@ -70,7 +86,7 @@ export default function Documents({ onNavigate }: { onNavigate: (p: string, id?:
   const generateCards = async (doc: any) => {
     setGenerating(doc.id);
     try {
-      const response = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:4000'}/api/generate-cards`, {
+      const response = await fetch(`/api/generate-cards`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ documentContent: doc.content, title: doc.title, documentId: doc.id }),
@@ -84,7 +100,8 @@ export default function Documents({ onNavigate }: { onNavigate: (p: string, id?:
         ...c, user_id: user?.id, document_id: doc.id, difficulty: 'easy'
       })));
 
-      // Navigate specifically to this document's cards
+      setSuccessMsg(`Generated ${aiCards.length} neural cards.`);
+      setTimeout(() => setSuccessMsg(null), 3000);
       onNavigate('flashcards', doc.id);
     } catch (err) { 
       console.error('Generation error:', err);
@@ -93,95 +110,273 @@ export default function Documents({ onNavigate }: { onNavigate: (p: string, id?:
     setGenerating(null);
   };
 
+  const generateNeuralSummary = async (doc: any) => {
+    setGenerating(doc.id);
+    try {
+      // Use relative path to utilize Vite Proxy
+      const response = await fetch(`/api/generate-neural-summary`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ documentContent: doc.content, title: doc.title, documentId: doc.id, userId: user?.id }),
+      });
+
+      if (!response.ok) {
+        let errMsg = 'Neural Engine failure';
+        try {
+          const errorData = await response.json();
+          errMsg = errorData.error || errMsg;
+        } catch (e) {
+          if (response.status === 404) {
+            errMsg = "Neural Engine route not found (404). Please restart your server with 'npm run dev'.";
+          } else if (response.status === 504 || response.status === 502) {
+            errMsg = "Neural Engine is offline or timed out. Ensure 'node server/index.js' is running.";
+          } else {
+            errMsg = `Communication error (Status: ${response.status}).`;
+          }
+        }
+        throw new Error(errMsg);
+      }
+      
+      const data = await response.json();
+      
+      // Save to Supabase from the client side (where the user is authenticated)
+      const { error: dbError } = await supabase.from('neural_summaries').insert([{
+          user_id: user?.id,
+          document_id: doc.id,
+          title: `Neural Summary: ${doc.title}`,
+          summary_text: data.summary,
+          quiz_data: data.quiz,
+          exam_data: data.exam
+      }]);
+
+      if (dbError) {
+          console.error("Database Save Error:", dbError);
+          throw new Error("Analysis complete, but failed to save to your library. Check connection.");
+      }
+
+      setSuccessMsg(`Neural analysis complete.`);
+      setTimeout(() => setSuccessMsg(null), 3000);
+      onNavigate('neuralSummary', doc.id);
+    } catch (err: any) { 
+      console.error('Neural Analysis Error:', err);
+      alert(`Neural Engine error: ${err.message}`); 
+    }
+    setGenerating(null);
+  };
+
   const filtered = docs.filter(d => d.title.toLowerCase().includes(search.toLowerCase()));
 
   return (
-      <div className="min-h-screen bg-[#F8FAFC]">
-        <nav className="bg-white border-b p-4 flex justify-between items-center sticky top-0 z-50">
+      <div className={`min-h-[calc(100vh-64px)] transition-colors duration-700 ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+        <nav className={`sticky top-0 z-[40] border-b p-4 flex flex-col md:flex-row justify-between items-center gap-4 transition-colors duration-700 ${
+            theme === 'dark' ? 'bg-black/20 border-white/5 backdrop-blur-xl' : 'bg-white/80 border-blue-100 backdrop-blur-xl'
+        }`}>
           <div className="flex items-center gap-3">
-            <button onClick={() => onNavigate('dashboard')} className="p-2 hover:bg-slate-100 rounded-full"><ArrowLeft /></button>
-            <h1 className="font-bold text-xl">My Library</h1>
+            <motion.button 
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={() => onNavigate('dashboard')} 
+                className={`p-2 rounded-full transition-colors ${theme === 'dark' ? 'hover:bg-white/5 text-white' : 'hover:bg-blue-50 text-slate-600'}`}
+            >
+                <ArrowLeft className={language === 'ar' ? 'rotate-180' : ''} />
+            </motion.button>
+            <h1 className={`font-black italic tracking-tighter uppercase text-xl ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{t.title}</h1>
           </div>
-          <div className="relative">
-            <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
-            <input placeholder="Search..." className="pl-10 pr-4 py-2 bg-slate-100 rounded-full border-none text-sm w-64 focus:ring-2 focus:ring-blue-500" value={search} onChange={e => setSearch(e.target.value)} />
+          <div className="relative w-full md:w-64">
+            <Search className={`absolute ${language === 'ar' ? 'right-3' : 'left-3'} top-2.5 ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`} size={16} />
+            <input 
+                placeholder={t.placeholder}
+                className={`${language === 'ar' ? 'pr-10 pl-4' : 'pl-10 pr-4'} py-2 rounded-full text-sm w-full focus:ring-2 focus:ring-blue-500 outline-none transition-all ${
+                    theme === 'dark' ? 'bg-white/5 border border-white/10 text-white' : 'bg-white border-slate-200 text-slate-900 shadow-sm'
+                }`}
+                value={search} 
+                onChange={e => setSearch(e.target.value)} 
+            />
           </div>
         </nav>
 
-        <main className="max-w-7xl mx-auto p-6 grid grid-cols-1 lg:grid-cols-12 gap-8">
-          <aside className="lg:col-span-4 bg-white p-6 rounded-2xl shadow-sm border h-fit sticky top-24">
-            <h2 className="font-bold mb-4 flex items-center gap-2"><FileUp size={18} className="text-blue-500"/> Upload File</h2>
-            <label className="border-2 border-dashed rounded-xl h-40 flex flex-col items-center justify-center cursor-pointer hover:bg-blue-50 transition-all">
-              {uploading ? <Loader className="animate-spin text-blue-500" /> : <><Plus className="text-slate-400"/><p className="text-xs font-bold text-slate-500 mt-2 uppercase">PDF, Word, Excel, TXT</p></>}
+        <main className="max-w-7xl mx-auto p-6 grid grid-cols-1 lg:grid-cols-12 gap-8 relative">
+          {/* Toasts */}
+          <AnimatePresence>
+            {successMsg && (
+                <motion.div 
+                    initial={{ opacity: 0, y: -100, x: '-50%' }}
+                    animate={{ opacity: 1, y: 20, x: '-50%' }}
+                    exit={{ opacity: 0, y: -100, x: '-50%' }}
+                    className="fixed top-20 left-1/2 z-[100] bg-green-600 text-white px-8 py-4 rounded-full font-black uppercase text-[10px] tracking-widest shadow-2xl flex items-center gap-3"
+                >
+                    <CheckCircle2 size={16} /> {successMsg}
+                </motion.div>
+            )}
+          </AnimatePresence>
+
+          <motion.aside 
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            className={`lg:col-span-4 p-8 rounded-[2.5rem] border h-fit sticky top-24 transition-all ${
+                theme === 'dark' ? 'bg-[#0D0D0D] border-white/5' : 'bg-white border-blue-100 shadow-xl shadow-blue-500/5'
+            }`}
+          >
+            <h2 className={`font-black italic uppercase tracking-tight mb-6 flex items-center gap-2 text-lg ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+                <FileUp size={20} className="text-blue-600"/> {t.upload}
+            </h2>
+            <label className={`border-2 border-dashed rounded-[2rem] h-56 flex flex-col items-center justify-center cursor-pointer transition-all hover:scale-[1.02] relative overflow-hidden ${
+                theme === 'dark' ? 'border-white/10 hover:bg-white/5' : 'border-blue-200 bg-blue-50/30 hover:bg-blue-50 hover:border-blue-400'
+            }`}>
+              {uploading ? (
+                <div className="flex flex-col items-center gap-4 w-full px-8">
+                    <Loader className="animate-spin text-blue-600" />
+                    <div className="w-full bg-blue-200/20 h-1.5 rounded-full overflow-hidden">
+                        <motion.div className="bg-blue-600 h-full" animate={{ width: `${uploadProgress}%` }} />
+                    </div>
+                    <p className={`text-[9px] font-black uppercase tracking-widest ${theme === 'dark' ? 'opacity-40' : 'text-blue-600'}`}>Parsing Stream {uploadProgress}%</p>
+                </div>
+              ) : (
+                <>
+                    <div className="p-5 bg-blue-600/10 rounded-2xl mb-4">
+                        <Plus className="text-blue-600" size={28}/>
+                    </div>
+                    <p className={`text-[10px] font-black uppercase tracking-[0.2em] ${theme === 'dark' ? 'text-slate-500' : 'text-slate-600'}`}>PDF, Word, Excel, TXT</p>
+                </>
+              )}
               <input type="file" className="hidden" onChange={handleUpload} accept=".pdf,.docx,.doc,.xlsx,.xls,.csv,.txt" />
             </label>
-            {content && (
-                <div className="mt-4 space-y-3 animate-in fade-in">
-                  <input className="w-full p-3 bg-slate-50 border rounded-xl text-sm" value={title} onChange={e => setTitle(e.target.value)} />
-                  <button onClick={saveToDB} className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold">Save to Library</button>
-                </div>
-            )}
-          </aside>
-
-          <section className="lg:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-4">
-            {errorMsg && (
-                <div className="col-span-full bg-red-50 border border-red-100 text-red-600 p-4 rounded-xl flex items-center gap-3 mb-4">
-                  <AlertCircle size={20} />
-                  <p className="font-medium">{errorMsg}</p>
-                  <button onClick={() => { setErrorMsg(null); fetchDocs(); }} className="ml-auto text-xs font-bold uppercase underline">Retry</button>
-                </div>
-            )}
-            {loading ? (
-                Array(4).fill(0).map((_, i) => (
-                    <div key={i} className="bg-white p-6 rounded-2xl border animate-pulse">
-                      <div className="flex justify-between mb-4">
-                        <div className="w-10 h-10 bg-slate-100 rounded-lg"></div>
-                        <div className="w-4 h-4 bg-slate-100 rounded"></div>
-                      </div>
-                      <div className="h-6 bg-slate-100 rounded w-3/4 mb-6"></div>
-                      <div className="flex gap-2">
-                        <div className="flex-1 h-10 bg-slate-50 rounded-xl"></div>
-                        <div className="flex-1 h-10 bg-slate-50 rounded-xl"></div>
-                        <div className="flex-1 h-10 bg-slate-50 rounded-xl"></div>
-                      </div>
-                    </div>
-                ))
-            ) : filtered.length > 0 ? (
-                filtered.map(doc => (
-                <div key={doc.id} className="bg-white p-6 rounded-2xl border hover:shadow-xl transition-all group">
-                  <div className="flex justify-between mb-4">
-                    <div className="p-2 bg-slate-50 rounded-lg group-hover:bg-blue-50">
-                      {doc.title.endsWith('.pdf') ? <FileText className="text-red-500" /> : <FileCode className="text-blue-500" />}
-                    </div>
-                    <button onClick={async () => { if(confirm('Delete?')) { await supabase.from('documents').delete().eq('id', doc.id); fetchDocs(); }}} className="text-slate-300 hover:text-red-500"><Trash2 size={16} /></button>
-                  </div>
-                  <h3 className="font-bold text-slate-800 line-clamp-1">{doc.title}</h3>
-                  <div className="mt-6 flex gap-2">
-                    <button onClick={() => onNavigate('chat', doc.id)} className="flex-1 bg-slate-50 hover:bg-indigo-50 p-2 rounded-xl flex flex-col items-center gap-1">
-                      <MessageSquare size={16} /><span className="text-[9px] font-black uppercase">Chat</span>
-                    </button>
-                    <button onClick={() => generateCards(doc)} disabled={!!generating} className="flex-1 bg-slate-900 text-white hover:bg-blue-600 p-2 rounded-xl flex flex-col items-center gap-1 transition-colors">
-                      {generating === doc.id ? <Loader size={16} className="animate-spin" /> : <CreditCard size={16} />}
-                      <span className="text-[9px] font-black uppercase">Cards</span>
-                    </button>
-                    <button
-                        onClick={() => onNavigate('quizzes', doc.id)}
-                        className="flex-1 bg-slate-50 hover:bg-purple-50 p-2 rounded-xl flex flex-col items-center gap-1"
+            <AnimatePresence>
+                {content && (
+                    <motion.div 
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="mt-8 space-y-5 overflow-hidden"
                     >
-                      <Brain size={16} />
-                      <span className="text-[9px] font-black uppercase">Study</span>
-                    </button>
-                  </div>
+                        <div className="space-y-2">
+                            <label className={`text-[10px] font-black uppercase tracking-widest ${theme === 'dark' ? 'opacity-50' : 'text-slate-500'}`}>Document Title</label>
+                            <input 
+                                className={`w-full p-5 rounded-2xl text-sm outline-none border transition-all font-bold ${
+                                    theme === 'dark' ? 'bg-white/5 border-white/10 text-white focus:border-blue-500' : 'bg-white border-slate-200 text-slate-900 focus:border-blue-600 focus:ring-4 focus:ring-blue-500/5'
+                                }`}
+                                value={title} 
+                                onChange={e => setTitle(e.target.value)} 
+                            />
+                        </div>
+                        <motion.button 
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                            onClick={saveToDB} 
+                            className="w-full bg-blue-600 text-white py-5 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-xl shadow-blue-600/20 hover:bg-blue-700 transition-all"
+                        >
+                            {t.commit}
+                        </motion.button>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+          </motion.aside>
+
+          <section className="lg:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+            <AnimatePresence>
+                {errorMsg && (
+                    <motion.div 
+                        initial={{ opacity: 0, y: -20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        className="col-span-full bg-red-500/10 border border-red-500/20 text-red-600 p-5 rounded-3xl flex items-center gap-4 shadow-lg shadow-red-500/5"
+                    >
+                    <AlertCircle size={24} />
+                    <p className="font-bold text-sm uppercase tracking-tight">{errorMsg}</p>
+                    <button onClick={() => { setErrorMsg(null); fetchDocs(); }} className="ml-auto text-[10px] font-black uppercase underline tracking-widest hover:text-red-700">Retry Link</button>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {loading ? (
+                <div className="col-span-full py-20 flex flex-col items-center">
+                    <StudentLibrarian />
+                    <div className="flex flex-col items-center gap-3 mt-6">
+                        <Loader className="animate-spin text-blue-600" size={32} />
+                        <p className={`text-[10px] font-black uppercase tracking-[0.4em] ${theme === 'dark' ? 'opacity-40' : 'text-slate-500'}`}>Indexing local data fragments...</p>
+                    </div>
                 </div>
-                ))
+            ) : filtered.length > 0 ? (
+                <AnimatePresence>
+                    {filtered.map((doc, i) => (
+                    <motion.div 
+                        key={doc.id} 
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: i * 0.05 }}
+                        whileHover={{ y: -8, scale: 1.02 }}
+                        className={`p-8 rounded-[3.5rem] border transition-all group relative overflow-hidden ${
+                            theme === 'dark' ? 'bg-[#0D0D0D] border-white/5 hover:border-blue-500/30 shadow-2xl' : 'bg-white border-slate-100 hover:shadow-2xl shadow-blue-500/5 hover:border-blue-200'
+                        }`}
+                    >
+                    <div className="flex justify-between mb-8 relative z-10">
+                        <div className={`p-4 rounded-2xl transition-all duration-500 ${theme === 'dark' ? 'bg-white/5 text-blue-400 group-hover:bg-blue-600 group-hover:text-white' : 'bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white shadow-inner'}`}>
+                        {doc.title.endsWith('.pdf') ? <FileText size={24} /> : <FileCode size={24} />}
+                        </div>
+                        <motion.button 
+                            whileHover={{ scale: 1.2, color: '#ef4444' }}
+                            onClick={async () => { if(confirm('Erase this data from library?')) { await supabase.from('documents').delete().eq('id', doc.id); fetchDocs(); }}} 
+                            className="text-slate-400 p-2 hover:bg-red-50 rounded-xl transition-all"
+                        >
+                            <Trash2 size={20} />
+                        </motion.button>
+                    </div>
+                    <h3 className={`font-black italic tracking-tighter uppercase text-xl line-clamp-1 mb-2 relative z-10 transition-colors ${theme === 'dark' ? 'text-white group-hover:text-blue-400' : 'text-slate-900 group-hover:text-blue-600'}`}>{doc.title}</h3>
+                    <p className={`text-[10px] font-black uppercase tracking-widest mb-10 relative z-10 ${theme === 'dark' ? 'opacity-30' : 'text-slate-400'}`}>Data Object v1.0</p>
+                    
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 relative z-10">
+                        <button onClick={() => onNavigate('chat', doc.id)} className={`p-4 rounded-[1.5rem] flex flex-col items-center gap-2 transition-all ${
+                            theme === 'dark' ? 'bg-white/5 hover:bg-blue-600 text-gray-400 hover:text-white' : 'bg-slate-50 hover:bg-blue-600 text-slate-500 hover:text-white shadow-sm'
+                        }`}>
+                            <MessageSquare size={18} /><span className="text-[9px] font-black uppercase tracking-widest">{language === 'ar' ? 'دردشة' : 'Chat'}</span>
+                        </button>
+                        <button 
+                            onClick={() => generateCards(doc)} 
+                            disabled={!!generating} 
+                            className={`p-4 rounded-[1.5rem] flex flex-col items-center gap-2 transition-all ${
+                                generating === doc.id ? 'bg-blue-600 text-white animate-pulse' : theme === 'dark' ? 'bg-white/5 hover:bg-indigo-600 text-gray-400 hover:text-white' : 'bg-slate-50 hover:bg-indigo-600 text-slate-500 hover:text-white shadow-sm'
+                            }`}
+                        >
+                            {generating === doc.id ? <Loader size={18} className="animate-spin" /> : <CreditCard size={18} />}
+                            <span className="text-[9px] font-black uppercase tracking-widest">{language === 'ar' ? 'بطاقات' : 'Cards'}</span>
+                        </button>
+                        <button
+                            onClick={() => onNavigate('quizzes', doc.id)}
+                            className={`p-4 rounded-[1.5rem] flex flex-col items-center gap-2 transition-all ${
+                                theme === 'dark' ? 'bg-white/5 hover:bg-purple-600 text-gray-400 hover:text-white' : 'bg-slate-50 hover:bg-purple-600 text-slate-500 hover:text-white shadow-sm'
+                            }`}
+                        >
+                            <Brain size={18} />
+                            <span className="text-[9px] font-black uppercase tracking-widest">{language === 'ar' ? 'اختبار' : 'Quiz'}</span>
+                        </button>
+                        <button
+                            onClick={() => generateNeuralSummary(doc)}
+                            className={`p-4 rounded-[1.5rem] flex flex-col items-center gap-2 transition-all group/sum ${
+                                theme === 'dark' ? 'bg-white/5 hover:bg-amber-500 text-gray-400 hover:text-white' : 'bg-slate-50 hover:bg-amber-500 text-slate-500 hover:text-white shadow-sm'
+                            }`}
+                        >
+                            <Sparkles size={18} className="group-hover/sum:animate-pulse" />
+                            <span className="text-[9px] font-black uppercase tracking-widest">{language === 'ar' ? 'ملخص' : 'Summary'}</span>
+                        </button>
+                    </div>
+
+                    {/* Subtle background decoration */}
+                    <div className={`absolute -bottom-6 -right-6 opacity-5 group-hover:opacity-10 transition-opacity duration-700 ${theme === 'dark' ? 'text-white' : 'text-blue-600'}`}>
+                        {doc.title.endsWith('.pdf') ? <FileText size={140} /> : <FileCode size={140} />}
+                    </div>
+                    </motion.div>
+                    ))}
+                </AnimatePresence>
             ) : (
-                <div className="col-span-full py-20 text-center">
-                  <div className="bg-slate-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <FileText className="text-slate-300" size={32} />
-                  </div>
-                  <h3 className="font-bold text-slate-800">Your library is empty</h3>
-                  <p className="text-slate-500 text-sm mt-1">Upload your first document to get started</p>
-                </div>
+                <motion.div 
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="col-span-full py-24 text-center flex flex-col items-center"
+                >
+                  <StudentLibrarian />
+                  <h3 className={`text-3xl font-black italic tracking-tighter uppercase mb-4 ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{t.empty}</h3>
+                  <p className={`font-bold max-w-xs mx-auto text-sm leading-relaxed ${theme === 'dark' ? 'opacity-50' : 'text-slate-500'}`}>{t.emptyDesc}</p>
+                </motion.div>
             )}
           </section>
         </main>

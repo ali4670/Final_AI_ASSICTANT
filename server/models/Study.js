@@ -12,7 +12,9 @@ const subjectSchema = new mongoose.Schema({
 });
 
 const studySchema = new mongoose.Schema({
+    userId: String,
     age: Number,
+    system: String,
     subjects: [subjectSchema],
     createdAt: {
         type: Date,

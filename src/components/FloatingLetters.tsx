@@ -14,7 +14,7 @@ const FloatingLetters: React.FC = () => {
           <motion.div
             key={`${language}-${letter.id}`}
             className={`absolute text-5xl md:text-7xl font-black select-none pointer-events-none transition-colors duration-1000 ${
-              theme === 'dark' ? 'text-blue-500/10' : 'text-blue-200/40'
+              theme === 'dark' ? 'text-blue-500/10' : 'text-blue-900/10'
             }`}
             style={{
               left: `${letter.x}%`,

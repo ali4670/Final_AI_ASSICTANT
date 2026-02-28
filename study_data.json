@@ -1,0 +1,342 @@
+{
+  "e406b9d7-5729-4dd9-8033-ccee5825241e": {
+    "age": 18,
+    "subjects": [
+      {
+        "name": "Arabic",
+        "grade": 0,
+        "lectureTime": "09:00",
+        "lessons": [
+          {
+            "name": "Chapter 1: Initial Link",
+            "grade": 0
+          },
+          {
+            "name": "Chapter 2: Core Protocols",
+            "grade": 0
+          },
+          {
+            "name": "Chapter 3: Advanced Theory",
+            "grade": 0
+          },
+          {
+            "name": "Chapter 4: Final Assessment",
+            "grade": 0
+          }
+        ]
+      },
+      {
+        "name": "English",
+        "grade": 0,
+        "lectureTime": "09:00",
+        "lessons": [
+          {
+            "name": "Chapter 1: Initial Link",
+            "grade": 0
+          },
+          {
+            "name": "Chapter 2: Core Protocols",
+            "grade": 0
+          },
+          {
+            "name": "Chapter 3: Advanced Theory",
+            "grade": 0
+          },
+          {
+            "name": "Chapter 4: Final Assessment",
+            "grade": 0
+          }
+        ]
+      },
+      {
+        "name": "French/German",
+        "grade": 0,
+        "lectureTime": "09:00",
+        "lessons": [
+          {
+            "name": "Chapter 1: Initial Link",
+            "grade": 0
+          },
+          {
+            "name": "Chapter 2: Core Protocols",
+            "grade": 0
+          },
+          {
+            "name": "Chapter 3: Advanced Theory",
+            "grade": 0
+          },
+          {
+            "name": "Chapter 4: Final Assessment",
+            "grade": 0
+          }
+        ]
+      },
+      {
+        "name": "Chemistry",
+        "grade": 0,
+        "lectureTime": "09:00",
+        "lessons": [
+          {
+            "name": "Chapter 1: Initial Link",
+            "grade": 0
+          },
+          {
+            "name": "Chapter 2: Core Protocols",
+            "grade": 0
+          },
+          {
+            "name": "Chapter 3: Advanced Theory",
+            "grade": 0
+          },
+          {
+            "name": "Chapter 4: Final Assessment",
+            "grade": 0
+          }
+        ]
+      },
+      {
+        "name": "Physics",
+        "grade": 0,
+        "lectureTime": "09:00",
+        "lessons": [
+          {
+            "name": "Chapter 1: Initial Link",
+            "grade": 0
+          },
+          {
+            "name": "Chapter 2: Core Protocols",
+            "grade": 0
+          },
+          {
+            "name": "Chapter 3: Advanced Theory",
+            "grade": 0
+          },
+          {
+            "name": "Chapter 4: Final Assessment",
+            "grade": 0
+          }
+        ]
+      },
+      {
+        "name": "Biology",
+        "grade": 0,
+        "lectureTime": "09:00",
+        "lessons": [
+          {
+            "name": "Chapter 1: Initial Link",
+            "grade": 0
+          },
+          {
+            "name": "Chapter 2: Core Protocols",
+            "grade": 0
+          },
+          {
+            "name": "Chapter 3: Advanced Theory",
+            "grade": 0
+          },
+          {
+            "name": "Chapter 4: Final Assessment",
+            "grade": 0
+          }
+        ]
+      },
+      {
+        "name": "Geology",
+        "grade": 0,
+        "lectureTime": "09:00",
+        "lessons": [
+          {
+            "name": "Chapter 1: Initial Link",
+            "grade": 0
+          },
+          {
+            "name": "Chapter 2: Core Protocols",
+            "grade": 0
+          },
+          {
+            "name": "Chapter 3: Advanced Theory",
+            "grade": 0
+          },
+          {
+            "name": "Chapter 4: Final Assessment",
+            "grade": 0
+          }
+        ]
+      }
+    ],
+    "system": "thanaweya_amma",
+    "updatedAt": "2026-02-28T00:41:27.519Z",
+    "calendar": {
+      "2026-02-28": "helli",
+      "2026-03-10": "dddd"
+    }
+  },
+  "cc12402e-5b83-49bb-aff1-e286ab0f42b6": {
+    "age": 17,
+    "subjects": [
+      {
+        "name": "Arabic",
+        "grade": 0,
+        "lectureTime": "09:00",
+        "lessons": [
+          {
+            "name": "Chapter 1: Initial Link",
+            "grade": 0
+          },
+          {
+            "name": "Chapter 2: Core Protocols",
+            "grade": 0
+          },
+          {
+            "name": "Chapter 3: Advanced Theory",
+            "grade": 0
+          },
+          {
+            "name": "Chapter 4: Final Assessment",
+            "grade": 0
+          }
+        ]
+      },
+      {
+        "name": "English",
+        "grade": 0,
+        "lectureTime": "09:00",
+        "lessons": [
+          {
+            "name": "Chapter 1: Initial Link",
+            "grade": 0
+          },
+          {
+            "name": "Chapter 2: Core Protocols",
+            "grade": 0
+          },
+          {
+            "name": "Chapter 3: Advanced Theory",
+            "grade": 0
+          },
+          {
+            "name": "Chapter 4: Final Assessment",
+            "grade": 0
+          }
+        ]
+      },
+      {
+        "name": "French/German",
+        "grade": 0,
+        "lectureTime": "09:00",
+        "lessons": [
+          {
+            "name": "Chapter 1: Initial Link",
+            "grade": 0
+          },
+          {
+            "name": "Chapter 2: Core Protocols",
+            "grade": 0
+          },
+          {
+            "name": "Chapter 3: Advanced Theory",
+            "grade": 0
+          },
+          {
+            "name": "Chapter 4: Final Assessment",
+            "grade": 0
+          }
+        ]
+      },
+      {
+        "name": "Chemistry",
+        "grade": 0,
+        "lectureTime": "09:00",
+        "lessons": [
+          {
+            "name": "Chapter 1: Initial Link",
+            "grade": 0
+          },
+          {
+            "name": "Chapter 2: Core Protocols",
+            "grade": 0
+          },
+          {
+            "name": "Chapter 3: Advanced Theory",
+            "grade": 0
+          },
+          {
+            "name": "Chapter 4: Final Assessment",
+            "grade": 0
+          }
+        ]
+      },
+      {
+        "name": "Physics",
+        "grade": 0,
+        "lectureTime": "09:00",
+        "lessons": [
+          {
+            "name": "Chapter 1: Initial Link",
+            "grade": 0
+          },
+          {
+            "name": "Chapter 2: Core Protocols",
+            "grade": 0
+          },
+          {
+            "name": "Chapter 3: Advanced Theory",
+            "grade": 0
+          },
+          {
+            "name": "Chapter 4: Final Assessment",
+            "grade": 0
+          }
+        ]
+      },
+      {
+        "name": "Biology",
+        "grade": 0,
+        "lectureTime": "09:00",
+        "lessons": [
+          {
+            "name": "Chapter 1: Initial Link",
+            "grade": 0
+          },
+          {
+            "name": "Chapter 2: Core Protocols",
+            "grade": 0
+          },
+          {
+            "name": "Chapter 3: Advanced Theory",
+            "grade": 0
+          },
+          {
+            "name": "Chapter 4: Final Assessment",
+            "grade": 0
+          }
+        ]
+      },
+      {
+        "name": "Geology",
+        "grade": 0,
+        "lectureTime": "09:00",
+        "lessons": [
+          {
+            "name": "Chapter 1: Initial Link",
+            "grade": 0
+          },
+          {
+            "name": "Chapter 2: Core Protocols",
+            "grade": 0
+          },
+          {
+            "name": "Chapter 3: Advanced Theory",
+            "grade": 0
+          },
+          {
+            "name": "Chapter 4: Final Assessment",
+            "grade": 0
+          }
+        ]
+      }
+    ],
+    "system": "thanaweya_amma",
+    "updatedAt": "2026-02-28T05:08:06.746Z"
+  }
+}

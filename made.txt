@@ -1,0 +1,186 @@
+-- ======================================================
+-- 1. SUPABASE FINAL SQL (COPY TO SQL EDITOR)
+-- ======================================================
+
+-- SCHEMA REFINEMENT (PROFILES)
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS email text;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS phone text;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_admin boolean DEFAULT false;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_banned boolean DEFAULT false;
+
+-- TABLE DEFINITIONS
+CREATE TABLE IF NOT EXISTS public.documents (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  title text NOT NULL,
+  content text NOT NULL,
+  file_url text,
+  file_type text NOT NULL DEFAULT 'text',
+  created_at timestamptz DEFAULT now() NOT NULL,
+  updated_at timestamptz DEFAULT now() NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.flashcards (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  document_id uuid REFERENCES public.documents(id) ON DELETE SET NULL,
+  question text NOT NULL,
+  answer text NOT NULL,
+  difficulty text DEFAULT 'medium' CHECK (difficulty IN ('easy', 'medium', 'hard')),
+  mastery_level integer DEFAULT 0 CHECK (mastery_level >= 0 AND mastery_level <= 5),
+  last_reviewed timestamptz,
+  created_at timestamptz DEFAULT now() NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.quizzes (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  document_id uuid REFERENCES public.documents(id) ON DELETE SET NULL,
+  title text NOT NULL,
+  questions jsonb NOT NULL DEFAULT '[]'::jsonb,
+  total_questions integer DEFAULT 0,
+  created_at timestamptz DEFAULT now() NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.neural_summaries (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  document_id uuid REFERENCES public.documents(id) ON DELETE CASCADE,
+  title text NOT NULL,
+  summary_text text NOT NULL,
+  quiz_data jsonb DEFAULT '[]'::jsonb,
+  exam_data jsonb DEFAULT '[]'::jsonb,
+  created_at timestamptz DEFAULT now() NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.daily_tasks (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  task_text text NOT NULL,
+  is_completed boolean DEFAULT false,
+  scheduled_date date DEFAULT CURRENT_DATE NOT NULL,
+  scheduled_time time,
+  notification_sent boolean DEFAULT false,
+  created_at timestamptz DEFAULT now() NOT NULL
+);
+
+-- SECURITY (RLS)
+ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE flashcards ENABLE ROW LEVEL SECURITY;
+ALTER TABLE quizzes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE neural_summaries ENABLE ROW LEVEL SECURITY;
+ALTER TABLE daily_tasks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Users view own docs') THEN
+    CREATE POLICY "Users view own docs" ON documents FOR SELECT TO authenticated USING (auth.uid() = user_id);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Users insert own docs') THEN
+    CREATE POLICY "Users insert own docs" ON documents FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Users manage own summaries') THEN
+    CREATE POLICY "Users manage own summaries" ON neural_summaries FOR ALL TO authenticated USING (auth.uid() = user_id);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Users manage own tasks') THEN
+    CREATE POLICY "Users manage own tasks" ON daily_tasks FOR ALL TO authenticated USING (auth.uid() = user_id);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Public profiles viewable') THEN
+    CREATE POLICY "Public profiles viewable" ON public.profiles FOR SELECT USING (true);
+  END IF;
+END $$;
+
+DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
+CREATE POLICY "Users can update own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id OR (SELECT is_admin FROM public.profiles WHERE id = auth.uid()));
+
+-- LOGIC (FUNCTIONS & TRIGGERS)
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger AS $$
+BEGIN
+  INSERT INTO public.profiles (id, username, email, phone, stars_count, is_admin)
+  VALUES (
+    new.id, 
+    COALESCE(new.raw_user_meta_data->>'username', SPLIT_PART(new.email, '@', 1)), 
+    new.email,
+    new.raw_user_meta_data->>'phone',
+    0,
+    CASE WHEN new.email = 'aliopooopp3@gmail.com' THEN true ELSE false END
+  );
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+CREATE OR REPLACE FUNCTION public.increment_stars(user_id uuid)
+RETURNS void AS $$
+BEGIN
+  UPDATE public.profiles
+  SET stars_count = stars_count + 1
+  WHERE id = user_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION public.admin_delete_user(target_user_id uuid)
+RETURNS void AS $$
+BEGIN
+  IF (SELECT is_admin FROM public.profiles WHERE id = auth.uid()) THEN
+    DELETE FROM auth.users WHERE id = target_user_id;
+  ELSE
+    RAISE EXCEPTION 'Access Denied: Admin privileges required.';
+  END IF;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- FINAL SYNC & PERMISSIONS
+GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role, postgres, authenticated;
+
+UPDATE public.profiles SET is_admin = true WHERE email = 'aliopooopp3@gmail.com';
+
+INSERT INTO public.profiles (id, username, email, phone, stars_count, is_admin)
+SELECT 
+    id, 
+    COALESCE(raw_user_meta_data->>'username', SPLIT_PART(email, '@', 1)), 
+    email, 
+    raw_user_meta_data->>'phone',
+    0, 
+    (email = 'aliopooopp3@gmail.com')
+FROM auth.users
+ON CONFLICT (id) DO UPDATE SET 
+  is_admin = (EXCLUDED.email = 'aliopooopp3@gmail.com'),
+  email = EXCLUDED.email,
+  phone = EXCLUDED.phone;
+
+-- ======================================================
+-- 2. SERVER ENDPOINT (FOR REFERENCE - DO NOT PASTE IN SQL)
+-- ======================================================
+
+-- app.post('/api/admin/reset-password', async (req, res) => {
+--     const { targetUserId, newPassword, adminId } = req.body;
+--     if (!supabase) return res.status(503).json({ error: "Supabase not configured" });
+--     try {
+--         const { data: adminProfile } = await supabase.from('profiles').select('is_admin').eq('id', adminId).single();
+--         if (!adminProfile?.is_admin) return res.status(403).json({ error: "Access Denied" });
+--         const { error: resetError } = await supabase.auth.admin.updateUserById(targetUserId, { password: newPassword });
+--         if (resetError) throw resetError;
+--         res.json({ success: true });
+--     } catch (error) {
+--         res.status(500).json({ error: error.message });
+--     }
+-- });
+
+-- ======================================================
+-- 3. FRONTEND SYNC LOGIC (FOR REFERENCE - DO NOT PASTE IN SQL)
+-- ======================================================
+
+-- const updateProfile = async (data: { username?: string; avatar_url?: string; phone?: string }) => {
+--     if (!supabase) return { error: new Error('Supabase not configured') };
+--     try {
+--       await supabase.auth.updateUser({ data: data });
+--       await supabase.from('profiles').update({ username: data.username, phone: data.phone }).eq('id', user?.id);
+--       return { error: null };
+--     } catch (error: any) { return { error }; }
+-- };

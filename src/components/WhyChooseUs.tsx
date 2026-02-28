@@ -4,7 +4,7 @@ import { Brain, Zap, Target, BarChart, MessageCircle, Rocket, Shield, Globe, Awa
 import { useTheme } from '../contexts/ThemeContext';
 
 interface WhyChooseUsProps {
-  onNavigate: (path: string) => void;
+  onNavigate: (page: string, id?: string) => void;
 }
 
 const WhyChooseUs: React.FC<WhyChooseUsProps> = ({ onNavigate }) => {
