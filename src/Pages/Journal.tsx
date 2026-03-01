@@ -34,7 +34,11 @@ export default function Journal({ onNavigate }: Props) {
     const [successMsg, setSuccessMsg] = useState<string | null>(null);
     const [notificationsEnabled, setNotificationsEnabled] = useState(false);
 
-    const formattedDate = selectedDate.toISOString().split('T')[0];
+    // Use local-safe date formatting (YYYY-MM-DD)
+    const year = selectedDate.getFullYear();
+    const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
+    const day = String(selectedDate.getDate()).padStart(2, '0');
+    const formattedDate = `${year}-${month}-${day}`;
 
     const fetchTasks = useCallback(async () => {
         if (!user) return;
@@ -80,15 +84,22 @@ export default function Journal({ onNavigate }: Props) {
                     time: newTaskTime || null
                 }),
             });
+            
             const data = await res.json();
-            if (data.id) {
-                setTasks([...tasks, data]);
+            
+            if (res.ok && data.id) {
+                setTasks(prev => [...prev, data]);
                 setNewTaskText("");
                 setNewTaskTime("");
                 setSuccessMsg("Task added to journal.");
                 setTimeout(() => setSuccessMsg(null), 3000);
+            } else {
+                throw new Error(data.error || "Failed to sync task with neural grid.");
             }
-        } catch (err) { console.error(err); }
+        } catch (err: any) { 
+            console.error(err);
+            alert("Uplink Error: " + err.message);
+        }
         finally { setLoading(false); }
     };
 

@@ -4,7 +4,7 @@ import {
   Play, Pause, RefreshCw, Settings, 
   BookOpen, X, Maximize2, 
   Palette, Clock, Zap, Minimize2, 
-  Coffee, School, Bed, Monitor, 
+  Coffee, School, Bed, Monitor, Home,
   Wind, Sparkles, Waves, Leaf, ChevronLeft, CloudRain, Snowflake, Sun,
   Bell, Volume2
 } from 'lucide-react';
