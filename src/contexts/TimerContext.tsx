@@ -12,12 +12,14 @@ interface TimerContextType {
     settings: { work: number; short: number; long: number };
     currentTask: string;
     bellSound: string;
+    growthPoints: number;
     toggleTimer: () => void;
     resetTimer: () => void;
     setMode: (mode: TimerMode) => void;
     setSettings: (settings: { work: number; short: number; long: number }) => void;
     setCurrentTask: (task: string) => void;
     setBellSound: (sound: string) => void;
+    incrementGrowth: (points: number) => Promise<void>;
 }
 
 const TimerContext = createContext<TimerContextType | undefined>(undefined);
@@ -32,13 +34,32 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const [streak, setStreak] = useState(0);
     const [currentTask, setCurrentTask] = useState('General Focus');
     const [bellSound, setBellSound] = useState('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+    const [growthPoints, setGrowthPoints] = useState(0);
 
     // Request notification permission
     useEffect(() => {
         if ("Notification" in window && Notification.permission === "default") {
             Notification.requestPermission();
         }
-    }, []);
+        if (user) {
+            fetchGrowthPoints();
+        }
+    }, [user]);
+
+    const fetchGrowthPoints = async () => {
+        if (!user || !supabase) return;
+        const { data } = await supabase.from('profiles').select('focus_growth_points').eq('id', user.id).single();
+        if (data) setGrowthPoints(data.focus_growth_points || 0);
+    };
+
+    const incrementGrowth = async (points: number) => {
+        if (!user || !supabase) return;
+        const newTotal = growthPoints + points;
+        setGrowthPoints(newTotal);
+        try {
+            await supabase.from('profiles').update({ focus_growth_points: newTotal }).eq('id', user.id);
+        } catch (e) { console.error(e); }
+    };
 
     const awardStar = async () => {
         if (!user) return;
@@ -80,6 +101,7 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 const nextMode = (cycle % 4 === 0) ? 'long' : 'short';
                 sendNotification("Focus Session Complete!", `Time for a ${nextMode === 'long' ? 'Long Break' : 'Short Break'}.`);
                 awardStar(); // AWARD THE STAR HERE
+                incrementGrowth(10); // ADD GROWTH POINTS
                 setStreak(prev => prev + 1);
                 switchMode(nextMode);
             } else {
@@ -89,7 +111,7 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             }
         }
         return () => clearInterval(interval);
-    }, [isActive, timeLeft, mode, cycle, switchMode, bellSound, user]);
+    }, [isActive, timeLeft, mode, cycle, switchMode, bellSound, user, growthPoints]);
 
     const toggleTimer = () => setIsActive(!isActive);
     const resetTimer = () => {
@@ -99,8 +121,8 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     return (
         <TimerContext.Provider value={{
-            timeLeft, isActive, mode, cycle, streak, settings, currentTask, bellSound,
-            toggleTimer, resetTimer, setMode: switchMode, setSettings, setCurrentTask, setBellSound
+            timeLeft, isActive, mode, cycle, streak, settings, currentTask, bellSound, growthPoints,
+            toggleTimer, resetTimer, setMode: switchMode, setSettings, setCurrentTask, setBellSound, incrementGrowth
         }}>
             {children}
         </TimerContext.Provider>

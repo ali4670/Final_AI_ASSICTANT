@@ -2,17 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Play, Pause, RefreshCw, Settings, 
-  Music, BookOpen, X, Maximize2, 
+  BookOpen, X, Maximize2, 
   Palette, Clock, Zap, Minimize2, 
-  Coffee, School, Bed, Monitor, Home,
+  Coffee, School, Bed, Monitor, 
   Wind, Sparkles, Waves, Leaf, ChevronLeft, CloudRain, Snowflake, Sun,
   Bell, Volume2
 } from 'lucide-react';
 import { useTimer } from '../contexts/TimerContext';
 import { useAuth } from '../contexts/AuthContext';
-import { useSpotify } from '../contexts/SpotifyContext';
 import { useTheme } from '../contexts/ThemeContext';
 import WeatherEffects from '../components/WeatherEffects';
+import { Canvas } from '@react-three/fiber';
+import FocusBiome from '../components/3D/FocusBiome';
 
 interface Props {
     onNavigate: (page: string) => void;
@@ -21,21 +22,16 @@ interface Props {
 const Pomodoro: React.FC<Props> = ({ onNavigate }) => {
     const { user } = useAuth();
     const { theme } = useTheme();
-    const { 
-        accessToken, isPlaying, currentTrack, volume, 
-        togglePlay, nextTrack, previousTrack, setVolume 
-    } = useSpotify();
     
     const { 
         timeLeft, isActive, mode, toggleTimer, resetTimer, 
         setMode, settings, setSettings, streak, cycle, 
-        currentTask, setCurrentTask, bellSound, setBellSound 
+        currentTask, setCurrentTask, bellSound, setBellSound, growthPoints
     } = useTimer();
     
     // UI State
     const [showSettings, setShowSettings] = useState(false);
     const [showAmbient, setShowAmbient] = useState(false);
-    const [showSpotify, setShowSpotify] = useState(false);
     const [weather, setWeather] = useState<'none' | 'rain' | 'snow'>('none');
     const [sceneIndex, setSceneIndex] = useState(0);
     const [isZenMode, setIsZenMode] = useState(false);
@@ -91,20 +87,12 @@ const Pomodoro: React.FC<Props> = ({ onNavigate }) => {
         }
     };
 
-    const toggleSpotify = () => {
-        setShowAmbient(false);
-        setShowSettings(false);
-        setShowSpotify(!showSpotify);
-    };
-
     const toggleSettings = () => {
         setShowAmbient(false);
-        setShowSpotify(false);
         setShowSettings(!showSettings);
     };
 
     const toggleAmbient = () => {
-        setShowSpotify(false);
         setShowSettings(false);
         setShowAmbient(!showAmbient);
     };
@@ -133,6 +121,19 @@ const Pomodoro: React.FC<Props> = ({ onNavigate }) => {
             </AnimatePresence>
 
             <WeatherEffects type={weather} intensity={weather === 'rain' ? 80 : 40} />
+
+            {/* 3D FOCUS BIOME */}
+            <div className="fixed bottom-10 left-10 w-64 h-64 z-40 pointer-events-none hidden lg:block">
+                <Canvas camera={{ position: [0, 1, 4], fov: 40 }}>
+                    <ambientLight intensity={0.5} />
+                    <pointLight position={[10, 10, 10]} intensity={1} />
+                    <FocusBiome growth={growthPoints} />
+                </Canvas>
+                <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 w-full text-center">
+                    <p className="text-[8px] font-black uppercase tracking-[0.4em] text-blue-500 opacity-40">Neural Biome Link</p>
+                    <p className="text-[10px] font-black italic uppercase tracking-tighter text-white">Growth Index: {growthPoints}</p>
+                </div>
+            </div>
 
             {/* STREAK & CYCLE: UP AND DOWN ONLY */}
             <motion.div 
@@ -254,9 +255,6 @@ const Pomodoro: React.FC<Props> = ({ onNavigate }) => {
                                 <button onClick={() => setWeather(weather === 'rain' ? 'snow' : weather === 'snow' ? 'none' : 'rain')} className={`p-4 rounded-2xl border transition-all ${theme === 'dark' ? 'bg-white/5 border-white/5 hover:bg-white/10 text-white' : 'bg-slate-100 border-slate-200 hover:bg-slate-200 text-slate-900'}`}>
                                     {weather === 'rain' ? <CloudRain size={18} /> : weather === 'snow' ? <Snowflake size={18} /> : <Sun size={18} />}
                                 </button>
-                                <button onClick={toggleSpotify} className={`p-4 rounded-2xl border transition-all ${showSpotify ? theme === 'dark' ? 'bg-white text-black' : 'bg-blue-600 text-white' : theme === 'dark' ? 'bg-white/5 border-white/5 hover:bg-white/10 text-white' : 'bg-slate-100 border-slate-200 hover:bg-slate-200 text-slate-900'}`}>
-                                    <Music size={18} />
-                                </button>
                                 <button onClick={toggleFullscreen} className={`p-4 rounded-2xl border transition-all ${theme === 'dark' ? 'bg-white/5 border-white/5 hover:bg-white/10 text-white' : 'bg-slate-100 border-slate-200 hover:bg-slate-200 text-slate-900'}`}>
                                     {isFullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
                                 </button>
@@ -291,81 +289,6 @@ const Pomodoro: React.FC<Props> = ({ onNavigate }) => {
                             ))}
                         </div>
                     </motion.div>
-                )}
-            </AnimatePresence>
-
-            {/* SPOTIFY PANEL */}
-            <AnimatePresence>
-                {showSpotify && (
-                    <motion.aside 
-                        initial={{ y: 600 }} animate={{ y: 0 }} exit={{ y: 600 }} 
-                        className={`fixed bottom-32 w-full md:w-[500px] left-1/2 -translate-x-1/2 backdrop-blur-3xl rounded-[3rem] border p-8 z-[110] shadow-2xl transition-colors ${
-                            theme === 'dark' ? 'bg-black/95 border-white/10 text-white' : 'bg-white/95 border-slate-200 text-slate-900'
-                        }`}
-                    >
-                        <div className="flex justify-between items-center mb-6">
-                            <div className="flex items-center gap-3">
-                                <div className="p-2 bg-green-500/10 rounded-xl">
-                                    <Music className="text-green-500" size={18} />
-                                </div>
-                                <h2 className="font-black uppercase tracking-widest text-[10px]">Neural Stream</h2>
-                            </div>
-                            <X className="cursor-pointer opacity-40 hover:opacity-100" onClick={() => setShowSpotify(false)} />
-                        </div>
-
-                        {!accessToken ? (
-                            <div className="text-center py-10">
-                                <p className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-6">Access Denied: Spotify Link Required</p>
-                                <button 
-                                    onClick={useSpotify().loginWithSpotify}
-                                    className="bg-green-600 text-white px-8 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-lg shadow-green-600/20 hover:bg-green-500 transition-all"
-                                >
-                                    Initialize Uplink
-                                </button>
-                            </div>
-                        ) : (
-                            <div className="space-y-8">
-                                <div className="flex items-center gap-6">
-                                    <div className={`w-24 h-24 rounded-2xl shadow-2xl border overflow-hidden transition-colors ${
-                                        theme === 'dark' ? 'border-white/10 bg-white/5' : 'border-slate-200 bg-slate-100'
-                                    }`}>
-                                        <img src={currentTrack?.albumArt || 'https://via.placeholder.com/150'} alt="" className="w-full h-full object-cover" />
-                                    </div>
-                                    <div className="flex-1 overflow-hidden">
-                                        <h3 className="text-xl font-black italic uppercase tracking-tighter truncate">{currentTrack?.name || 'No Track'}</h3>
-                                        <p className="text-[10px] font-black uppercase tracking-widest opacity-40 truncate">{currentTrack?.artist || 'Unknown Signal'}</p>
-                                    </div>
-                                </div>
-
-                                <div className="flex items-center justify-center gap-8 py-4">
-                                    <button onClick={previousTrack} className={`${theme === 'dark' ? 'text-gray-400 hover:text-white' : 'text-slate-400 hover:text-slate-900'} transition-colors`}>
-                                        <SkipBack size={24} />
-                                    </button>
-                                    <button 
-                                        onClick={togglePlay}
-                                        className={`w-16 h-16 rounded-full flex items-center justify-center hover:scale-105 transition-all shadow-xl ${
-                                            theme === 'dark' ? 'bg-white text-black shadow-white/10' : 'bg-slate-900 text-white shadow-slate-900/20'
-                                        }`}
-                                    >
-                                        {isPlaying ? <Pause size={28} /> : <Play size={28} className="ml-1" />}
-                                    </button>
-                                    <button onClick={nextTrack} className={`${theme === 'dark' ? 'text-gray-400 hover:text-white' : 'text-slate-400 hover:text-slate-900'} transition-colors`}>
-                                        <SkipForward size={24} />
-                                    </button>
-                                </div>
-
-                                <div className="flex items-center gap-4">
-                                    <Volume2 size={14} className="opacity-30" />
-                                    <input 
-                                        type="range" min="0" max="1" step="0.01" 
-                                        value={volume}
-                                        onChange={(e) => setVolume(Number(e.target.value))}
-                                        className={`flex-1 ${theme === 'dark' ? 'accent-white' : 'accent-slate-900'}`} 
-                                    />
-                                </div>
-                            </div>
-                        )}
-                    </motion.aside>
                 )}
             </AnimatePresence>
 

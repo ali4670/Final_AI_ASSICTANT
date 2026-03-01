@@ -181,7 +181,7 @@
         "lessons": [
           {
             "name": "Chapter 1: Initial Link",
-            "grade": 0
+            "grade": 69
           },
           {
             "name": "Chapter 2: Core Protocols",
@@ -334,9 +334,15 @@
             "grade": 0
           }
         ]
+      },
+      {
+        "name": "",
+        "grade": 0,
+        "lectureTime": "09:00",
+        "lessons": []
       }
     ],
     "system": "thanaweya_amma",
-    "updatedAt": "2026-02-28T05:08:06.746Z"
+    "updatedAt": "2026-03-01T01:11:05.837Z"
   }
 }

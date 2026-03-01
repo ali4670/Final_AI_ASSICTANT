@@ -6,6 +6,7 @@ import WhyChooseUs from '../components/WhyChooseUs';
 import FloatingLetters from '../components/FloatingLetters';
 import { StudentAnswering, StudentFlashcards, StudentChatting } from '../components/AnimatedVisual';
 import ScrollScene from '../components/3D/ScrollScene';
+import Presentation from './Presentation';
 
 interface HomeProps {
     onNavigate: (page: string, id?: string) => void;
@@ -27,6 +28,9 @@ const Home: React.FC<HomeProps> = ({ onNavigate }) => {
 
             <WhyChooseUs onNavigate={onNavigate} />
 
+            <div className="mt-32">
+                <Presentation />
+            </div>
         </div>
     );
 };

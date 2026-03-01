@@ -37,7 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
-      setIsGuest(session?.user?.email === 'guest@neurostudy.ai');
+      setIsGuest(session?.user?.email === 'guest@neuralstudy.ai');
       setIsAdmin(session?.user?.email === 'aliopooopp3@gmail.com' || session?.user?.user_metadata?.is_admin === true);
       setLoading(false);
     });
@@ -45,7 +45,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
-      setIsGuest(session?.user?.email === 'guest@neurostudy.ai');
+      setIsGuest(session?.user?.email === 'guest@neuralstudy.ai');
       setIsAdmin(session?.user?.email === 'aliopooopp3@gmail.com' || session?.user?.user_metadata?.is_admin === true);
     });
 
@@ -131,7 +131,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInAsGuest = async () => {
     if (!supabase) return { error: new Error('Supabase not configured') };
-    const GUEST_EMAIL = 'guest@neurostudy.ai';
+    const GUEST_EMAIL = 'guest@neuralstudy.ai';
     const GUEST_PWD = 'NeuroGuestLogin2026!';
     
     try {
@@ -167,12 +167,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (authError) throw authError;
 
       // 2. Sync with public.profiles table
+      const updateData: any = {};
+      if (data.username) updateData.username = data.username;
+      if (data.phone) updateData.phone = data.phone;
+      if (data.avatar_url) updateData.avatar_url = data.avatar_url;
+
       const { error: profileError } = await supabase
         .from('profiles')
-        .update({
-          username: data.username,
-          phone: data.phone
-        })
+        .update(updateData)
         .eq('id', user?.id);
       
       if (profileError) throw profileError;

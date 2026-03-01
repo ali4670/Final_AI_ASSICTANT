@@ -5,19 +5,23 @@ export const translations = {
       search: "Execute search protocol...",
       stats: {
         objects: "Neural Objects",
-        cards: "Recall Cards",
+        cards: "Recall Nodes",
         sync: "Sync Cycles",
         streak: "Temporal Streak"
       },
       menu: {
         library: { title: "Neural Library", desc: "Central repository for processed academic data fragments." },
-        chat: { title: "AI Sync", desc: "Real-time cognitive interaction with your document core." },
-        journal: { title: "Daily Journal", desc: "Neural to-do list with time-based alerts and notifications." },
-        cards: { title: "Recall Cards", desc: "Optimized spaced-repetition engine for data retention." },
+        chat: { title: "Neural Sync", desc: "Real-time cognitive interaction with your Neural Study core." },
+        journal: { title: "Neural Journal", desc: "Task tracking and cognitive planning interface." },
+        cards: { title: "Recall Nodes", desc: "Optimized spaced-repetition engine for data retention." },
         quiz: { title: "Evaluation", desc: "Neural testing protocols to verify information mastery." },
-        roadmap: { title: "Roadmap", desc: "Long-term visualization of your academic structure and goals." },
+        roadmap: { title: "Temporal Map", desc: "Long-term visualization of your academic structure." },
         focus: { title: "Focus Core", desc: "Ambient high-performance study environment." },
-        leaderboard: { title: "Hall of Fame", desc: "View top students and neural star rankings." }
+        leaderboard: { title: "Hall of Fame", desc: "View top students and neural star rankings." },
+        resume: { title: "Neural CV", desc: "Architect your professional identity and resume." },
+        graph: { title: "Neural Web", desc: "Explore the multidimensional connections between your data nodes." },
+        mastery: { title: "Cognitive Map", desc: "3D visualization of your neural mastery and academic progress." },
+        trees: { title: "Botanical Registry", desc: "A 3D gallery of your biological focus achievements and biome growth." }
       }
     },
     library: {
@@ -55,19 +59,23 @@ export const translations = {
       search: "تنفيذ بروتوكول البحث...",
       stats: {
         objects: "الأجسام العصبية",
-        cards: "بطاقات الاستدعاء",
+        cards: "عقد الاستدعاء",
         sync: "دورات المزامنة",
         streak: "سلسلة الإنجاز"
       },
       menu: {
         library: { title: "المكتبة العصبية", desc: "المستودع المركزي لقطع البيانات الأكاديمية المعالجة." },
-        chat: { title: "المزامنة الذكية", desc: "تفاعل معرفي فوري مع قلب مستنداتك." },
-        journal: { title: "اليوميات", desc: "قائمة مهام عصبية مع تنبيهات وإشعارات زمنية." },
-        cards: { title: "بطاقات الاستدعاء", desc: "محرك تكرار متباعد محسن للاحتفاظ بالبيانات." },
+        chat: { title: "المزامنة العصبية", desc: "تفاعل معرفي فوري مع قلب مستنداتك في نيورال ستادي." },
+        journal: { title: "اليوميات العصبية", desc: "تتبع المهام وواجهة التخطيط المعرفي." },
+        cards: { title: "عقد الاستدعاء", desc: "محرك تكرار متباعد محسن للاحتفاظ بالبيانات." },
         quiz: { title: "التقييم", desc: "بروتوكولات اختبار عصبية للتحقق من إتقان المعلومات." },
-        roadmap: { title: "خارطة الطريق", desc: "تصور طويل المدى لهيكلك الأكاديمي وأهدافك." },
+        roadmap: { title: "الخريطة الزمنية", desc: "تصور طويل المدى لهيكلك الأكاديمي." },
         focus: { title: "مركز التركيز", desc: "بيئة دراسة عالية الأداء محيطة." },
-        leaderboard: { title: "لوحة الشرف", desc: "عرض أفضل الطلاب وتصنيفات النجوم العصبية." }
+        leaderboard: { title: "لوحة الشرف", desc: "عرض أفضل الطلاب وتصنيفات النجوم العصبية." },
+        resume: { title: "السيرة العصبية", desc: "هندسة هويتك المهنية وسيرتك الذاتية." },
+        graph: { title: "الشبكة العصبية", desc: "استكشف الروابط متعددة الأبعاد بين عقد بياناتك." },
+        mastery: { title: "الخريطة المعرفية", desc: "تصور ثلاثي الأبعاد لإتقانك العصبي وتقدمك الأكاديمي." },
+        trees: { title: "السجل النباتي", desc: "معرض ثلاثي الأبعاد لإنجازات تركيزك الحيوي ونمو البيئة الحيوية." }
       }
     },
     library: {

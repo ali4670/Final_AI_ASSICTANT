@@ -372,7 +372,7 @@ const About: React.FC<AboutProps> = ({ onNavigate }) => {
                         <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center">
                             <Zap className="text-white" size={20} />
                         </div>
-                        <span className="font-black italic tracking-tighter text-xl text-white uppercase">NeuroStudy</span>
+                        <span className="font-black italic tracking-tighter text-xl text-white uppercase">Neural Study</span>
                     </div>
                     <p className={`text-[10px] font-black tracking-[0.4em] uppercase ${
                         theme === 'dark' ? 'text-gray-700' : 'text-slate-500'

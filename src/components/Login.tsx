@@ -242,7 +242,7 @@ const Login = ({ onToggleMode }: LoginProps) => {
       {/* Footer Info */}
       <div className="fixed bottom-10 left-10 hidden xl:flex items-center gap-4 opacity-30 group cursor-default">
          <div className={`w-10 h-px transition-all group-hover:w-20 ${theme === 'dark' ? 'bg-white' : 'bg-slate-900'}`} />
-         <span className={`text-[10px] font-black uppercase tracking-[0.5em] ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>NeuroStudy Neural Interface // Security Level 4</span>
+         <span className={`text-[10px] font-black uppercase tracking-[0.5em] ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Neural Study Neural Interface // Security Level 4</span>
       </div>
     </div>
   );

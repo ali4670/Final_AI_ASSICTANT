@@ -2,7 +2,7 @@ import { useState, useEffect, ChangeEvent } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { parseFile } from '../lib/fileParser';
-import { ArrowLeft, FileText, Trash2, MessageSquare, CreditCard, Brain, Loader, FileUp, Search, Plus, FileCode, AlertCircle, Sparkles, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, FileText, Trash2, MessageSquare, CreditCard, Brain, Loader, FileUp, Search, Plus, FileCode, AlertCircle, Sparkles, CheckCircle2, ChevronRight, Camera } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTheme } from '../contexts/ThemeContext';
 import { StudentLibrarian } from './AnimatedVisual';
@@ -27,6 +27,7 @@ export default function Documents({ onNavigate }: { onNavigate: (p: string, id?:
   useEffect(() => { fetchDocs(); }, [user]);
 
   const fetchDocs = async () => {
+    if (!supabase) return;
     try {
       const { data, error } = await supabase.from('documents').select('*').order('created_at', { ascending: false });
       if (error) throw error;
@@ -57,6 +58,7 @@ export default function Documents({ onNavigate }: { onNavigate: (p: string, id?:
   };
 
   const saveToDB = async () => {
+    if (!supabase) return;
     setUploading(true);
     const { data, error } = await supabase.from('documents').insert([{
       user_id: user?.id, title, content, file_type: title.split('.').pop()
@@ -84,6 +86,7 @@ export default function Documents({ onNavigate }: { onNavigate: (p: string, id?:
   };
 
   const generateCards = async (doc: any) => {
+    if (!supabase) return;
     setGenerating(doc.id);
     try {
       const response = await fetch(`/api/generate-cards`, {
@@ -111,6 +114,7 @@ export default function Documents({ onNavigate }: { onNavigate: (p: string, id?:
   };
 
   const generateNeuralSummary = async (doc: any) => {
+    if (!supabase) return;
     setGenerating(doc.id);
     try {
       // Use relative path to utilize Vite Proxy
@@ -270,6 +274,48 @@ export default function Documents({ onNavigate }: { onNavigate: (p: string, id?:
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            <div className="mt-12 pt-8 border-t border-white/5 space-y-4">
+                <h3 className="text-[10px] font-black uppercase tracking-[0.4em] opacity-30 mb-6 px-2 text-center">Architect Tools</h3>
+                
+                <motion.button 
+                    whileHover={{ scale: 1.02, x: 5 }}
+                    onClick={() => onNavigate('vision')}
+                    className={`w-full p-6 rounded-3xl border flex items-center justify-between transition-all ${
+                        theme === 'dark' ? 'bg-blue-600/10 border-blue-500/30 hover:bg-blue-600/20' : 'bg-blue-50 border-blue-100 hover:bg-blue-100'
+                    }`}
+                >
+                    <div className="flex items-center gap-4">
+                        <div className="p-3 bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-600/20">
+                            <Camera size={20} />
+                        </div>
+                        <div className="text-left">
+                            <p className="text-xs font-black uppercase tracking-widest">Camera Uplink</p>
+                            <p className="text-[8px] font-bold opacity-40 uppercase tracking-widest text-blue-500">Scan physical notes</p>
+                        </div>
+                    </div>
+                    <ChevronRight size={16} className="opacity-20" />
+                </motion.button>
+
+                <motion.button 
+                    whileHover={{ scale: 1.02, x: 5 }}
+                    onClick={() => onNavigate('resume')}
+                    className={`w-full p-6 rounded-3xl border flex items-center justify-between transition-all ${
+                        theme === 'dark' ? 'bg-white/5 border-white/5 hover:border-blue-500/50' : 'bg-slate-50 border-slate-200 hover:border-blue-600'
+                    }`}
+                >
+                    <div className="flex items-center gap-4">
+                        <div className="p-3 bg-blue-600/10 text-blue-600 rounded-xl">
+                            <FileText size={20} />
+                        </div>
+                        <div className="text-left">
+                            <p className="text-xs font-black uppercase tracking-widest">Resume Builder</p>
+                            <p className="text-[8px] font-bold opacity-40 uppercase tracking-widest">Architect Neural CV</p>
+                        </div>
+                    </div>
+                    <ChevronRight size={16} className="opacity-20" />
+                </motion.button>
+            </div>
           </motion.aside>
 
           <section className="lg:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -315,7 +361,7 @@ export default function Documents({ onNavigate }: { onNavigate: (p: string, id?:
                         </div>
                         <motion.button 
                             whileHover={{ scale: 1.2, color: '#ef4444' }}
-                            onClick={async () => { if(confirm('Erase this data from library?')) { await supabase.from('documents').delete().eq('id', doc.id); fetchDocs(); }}} 
+                            onClick={async () => { if(supabase && confirm('Erase this data from library?')) { await supabase.from('documents').delete().eq('id', doc.id); fetchDocs(); }}} 
                             className="text-slate-400 p-2 hover:bg-red-50 rounded-xl transition-all"
                         >
                             <Trash2 size={20} />

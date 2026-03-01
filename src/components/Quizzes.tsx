@@ -93,13 +93,14 @@ export default function Quizzes({ onNavigate, documentId }: { onNavigate: (p: st
       const { data: doc } = await supabase.from('documents').select('content, title').eq('id', documentId).single();
       if (!doc) return;
 
-      const response = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:4000'}/api/generate-quiz`, {
+      const response = await fetch(`/api/generate-quiz`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
             documentContent: doc.content, 
             title: doc.title,
-            count: 10 
+            count: 10,
+            existingQuestions: questions.map(q => q.question)
         }),
       });
 

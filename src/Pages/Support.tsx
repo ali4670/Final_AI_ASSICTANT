@@ -21,12 +21,15 @@ import { useTheme } from '../contexts/ThemeContext';
 import WalkingStudent from '../components/3D/WalkingStudent';
 import { Canvas } from '@react-three/fiber';
 import * as THREE from 'three';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 
 interface SupportProps {
     onNavigate: (page: string, id?: string) => void;
 }
 
 const Support: React.FC<SupportProps> = ({ onNavigate }) => {
+    const { user } = useAuth();
     const { theme } = useTheme();
     const [searchQuery, setSearchQuery] = useState('');
     const [submitted, setSubmitted] = useState(false);
@@ -40,13 +43,29 @@ const Support: React.FC<SupportProps> = ({ onNavigate }) => {
         { q: "Is there a limit to the number of flashcards?", a: "Currently, our standard engine generates up to 30 flashcards per document fragment, but there is no total limit for your library." }
     ];
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (email && message) {
+        if (!email || !message) return;
+
+        try {
+            if (!supabase) throw new Error("Link Offline");
+            
+            const { error } = await supabase.from('support_messages').insert([{
+                user_id: user?.id,
+                email,
+                subject: "Technical Inquiry",
+                message,
+                status: 'pending'
+            }]);
+
+            if (error) throw error;
+
             setSubmitted(true);
             setTimeout(() => setSubmitted(false), 5000);
             setEmail('');
             setMessage('');
+        } catch (err: any) {
+            alert("Protocol failure: " + err.message);
         }
     };
 
@@ -171,7 +190,7 @@ const Support: React.FC<SupportProps> = ({ onNavigate }) => {
                             </div>
 
                             <div className="mt-16 grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <ContactCard icon={<Mail size={24} />} label="Email Protocol" value="support@neurostudy.ai" theme={theme} />
+                                <ContactCard icon={<Mail size={24} />} label="Email Protocol" value="support@neuralstudy.ai" theme={theme} />
                                 <ContactCard icon={<Phone size={24} />} label="Voice Uplink" value="+20 123 456 7890" theme={theme} />
                             </div>
                         </div>

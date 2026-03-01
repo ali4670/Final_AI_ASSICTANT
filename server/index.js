@@ -20,81 +20,61 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 
-const GROQ_API_KEY = process.env.GROQ_API_KEY || process.env.VITE_GROQ_API_KEY;
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+let GROQ_API_KEY = process.env.GROQ_API_KEY || process.env.VITE_GROQ_API_KEY;
+let OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-if (!GROQ_API_KEY) {
-    console.warn("WARNING: GROQ_API_KEY is not defined in environment variables.");
-}
-
-const groq = new Groq({ apiKey: GROQ_API_KEY || 'MISSING_KEY' });
-const openai = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
 const supabase = (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) 
     ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) 
     : null;
 
-import SpotifyWebApi from 'spotify-web-api-node';
+let groq = new Groq({ apiKey: GROQ_API_KEY || 'MISSING_KEY' });
+let openai = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
 
-// Spotify Configuration
-const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID;
-const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET;
-const SPOTIFY_REDIRECT_URI = process.env.SPOTIFY_REDIRECT_URI || 'http://localhost:5173/callback'; // Default for local dev
+// Function to load settings from Supabase
+const loadSettings = async () => {
+    if (!supabase) return;
+    try {
+        const { data: settings, error } = await supabase.from('system_settings').select('*');
+        if (error) throw error;
 
-const spotifyApi = new SpotifyWebApi({
-    clientId: SPOTIFY_CLIENT_ID,
-    clientSecret: SPOTIFY_CLIENT_SECRET,
-    redirectUri: SPOTIFY_REDIRECT_URI,
-});
+        settings.forEach(setting => {
+            if (setting.value) {
+                if (setting.key === 'GROQ_API_KEY') {
+                    GROQ_API_KEY = setting.value;
+                    groq = new Groq({ apiKey: GROQ_API_KEY });
+                }
+                if (setting.key === 'OPENAI_API_KEY') {
+                    OPENAI_API_KEY = setting.value;
+                    openai = new OpenAI({ apiKey: OPENAI_API_KEY });
+                }
+            }
+        });
+        console.log("✅ System settings loaded from Supabase");
+    } catch (err) {
+        console.error("❌ Failed to load settings from Supabase:", err.message);
+    }
+};
 
-// --- SPOTIFY OAUTH ENDPOINTS ---
-app.get('/api/spotify/login', (req, res) => {
-    console.log('Spotify login initiated');
-    const scopes = [
-        'user-read-private',
-        'user-read-email',
-        'streaming',
-        'user-read-playback-state',
-        'user-modify-playback-state',
-        'user-library-read',
-        'user-read-currently-playing',
-    ];
-    res.redirect(spotifyApi.createAuthorizeURL(scopes));
-});
+// Initial load
+loadSettings();
 
-app.get('/api/spotify/callback', async (req, res) => {
-    const code = req.query.code || null;
+// Admin: Reload Config
+app.post('/api/admin/reload-config', async (req, res) => {
+    const { adminId } = req.body;
+    if (!supabase) return res.status(503).json({ error: "Supabase not configured" });
 
     try {
-        const data = await spotifyApi.authorizationCodeGrant(code);
-        const { access_token, refresh_token, expires_in } = data.body;
+        const { data: adminProfile } = await supabase.from('profiles').select('is_admin').eq('id', adminId).single();
+        if (!adminProfile?.is_admin) return res.status(403).json({ error: "Forbidden" });
 
-        // Redirect back to frontend with tokens
-        const frontendUrl = process.env.VITE_FRONTEND_URL || 'http://localhost:5173';
-        res.redirect(
-            `${frontendUrl}/callback?access_token=${access_token}&refresh_token=${refresh_token}&expires_in=${expires_in}`
-        );
+        await loadSettings();
+        res.json({ success: true, message: "Configuration reloaded" });
     } catch (error) {
-        console.error('Error during Spotify callback:', error);
-        res.status(500).json({ error: 'Authentication failed' });
+        res.status(500).json({ error: error.message });
     }
 });
-
-app.get('/api/spotify/refresh_token', async (req, res) => {
-    const refreshToken = req.query.refresh_token;
-    spotifyApi.setRefreshToken(refreshToken);
-
-    try {
-        const data = await spotifyApi.refreshAccessToken();
-        const { access_token, expires_in } = data.body;
-        res.json({ access_token, expires_in });
-    } catch (error) {
-        console.error('Error refreshing Spotify access token:', error);
-        res.status(500).json({ error: 'Could not refresh token' });
-    }
-});
-
 
 // --- FALLBACK STORAGE (if MongoDB is missing) ---
 const LOCAL_DB_PATH = path.join(process.cwd(), 'study_data.json');
@@ -123,42 +103,21 @@ app.post('/api/index-document', async (req, res) => {
 // --- GENERATE FLASHCARDS ---
 app.post('/api/generate-cards', async (req, res) => {
     const { documentContent, title, documentId, count = 10, existingQuestions = [] } = req.body;
-    
     try {
         const prompt = `Based on the following document titled "${title}", generate ${count} high-quality flashcards for studying. Each flashcard must have a "question" and an "answer". 
-        Return ONLY a valid JSON array of objects with "question" and "answer" keys. Do not include markdown code blocks, just the raw JSON.
-        
-        ${existingQuestions.length > 0 ? `AVOID these existing questions: ${existingQuestions.join(', ')}` : ''}
-
-        Document Content:
-        ${documentContent.slice(0, 15000)}`;
+        Return ONLY a valid JSON array of objects with "question" and "answer" keys. 
+        ${existingQuestions.length > 0 ? `AVOID these existing questions: ${existingQuestions.join(' | ')}` : ''}
+        Document Content: ${documentContent.slice(0, 15000)}`;
 
         const completion = await groq.chat.completions.create({
-            messages: [
-                { role: "system", content: "You are a JSON-only response bot. You output pure JSON arrays without markdown or explanation." },
-                { role: "user", content: prompt }
-            ],
+            messages: [{ role: "system", content: "JSON-only bot." }, { role: "user", content: prompt }],
             model: "llama-3.3-70b-versatile",
             temperature: 0.3,
             max_tokens: 3000,
         });
 
-        let cardsText = completion.choices[0]?.message?.content || "[]";
-        
-        try {
-            cardsText = cardsText.replace(/```json/g, '').replace(/```/g, '').trim();
-            const cards = JSON.parse(cardsText);
-            res.json(cards);
-        } catch (parseError) {
-            console.error("AI JSON Parse Error. Raw content:", cardsText);
-            const jsonMatch = cardsText.match(/\[.*\]/s);
-            if (jsonMatch) {
-                const cards = JSON.parse(jsonMatch[0]);
-                res.json(cards);
-            } else {
-                throw new Error("Could not extract valid JSON from AI response");
-            }
-        }
+        const repaired = repairJSON(completion.choices[0]?.message?.content || "[]");
+        res.json(JSON.parse(repaired));
     } catch (error) {
         console.error("Flashcard generation error:", error);
         res.status(500).json({ error: "Failed to generate flashcards: " + error.message });
@@ -167,54 +126,59 @@ app.post('/api/generate-cards', async (req, res) => {
 
 // --- GENERATE QUIZ ---
 app.post('/api/generate-quiz', async (req, res) => {
-    const { documentContent, title, count = 10 } = req.body;
-    
+    const { documentContent, title, count = 10, existingQuestions = [] } = req.body;
     try {
-        const prompt = `Based on the following document titled "${title}", generate a quiz with ${count} multiple-choice questions. 
-        Each question should have:
-        1. "question": The question text.
-        2. "options": An array of 4 possible answers.
-        3. "answer": The string of the correct answer from the options.
-        4. "explanation": A brief explanation of the correct answer.
-        
-        Return ONLY a valid JSON array of these objects. Do not include markdown code blocks.
-        
-        Document Content:
-        ${documentContent.slice(0, 15000)}`;
+        const prompt = `Based on "${title}", generate a quiz with ${count} multiple-choice questions. 
+        Each must have: "question", "options" (4 strings), "answer" (correct string), and "explanation".
+        ${existingQuestions.length > 0 ? `AVOID these existing questions: ${existingQuestions.join(' | ')}` : ''}
+        Return ONLY valid JSON array.
+        Document Content: ${documentContent.slice(0, 15000)}`;
 
         const completion = await groq.chat.completions.create({
-            messages: [
-                { role: "system", content: "You are a JSON-only response bot. You output pure JSON arrays without markdown or explanation." },
-                { role: "user", content: prompt }
-            ],
+            messages: [{ role: "system", content: "JSON-only response bot." }, { role: "user", content: prompt }],
             model: "llama-3.3-70b-versatile",
             temperature: 0.3,
             max_tokens: 3000,
         });
 
-        let quizText = completion.choices[0]?.message?.content || "[]";
-        
-        try {
-            quizText = quizText.replace(/```json/g, '').replace(/```/g, '').trim();
-            const quiz = JSON.parse(quizText);
-            res.json(quiz);
-        } catch (parseError) {
-            console.error("AI Quiz JSON Parse Error. Raw content:", quizText);
-            const jsonMatch = quizText.match(/\[.*\]/s);
-            if (jsonMatch) {
-                const quiz = JSON.parse(jsonMatch[0]);
-                res.json(quiz);
-            } else {
-                throw new Error("Could not extract valid JSON from AI response");
-            }
-        }
+        const repaired = repairJSON(completion.choices[0]?.message?.content || "[]");
+        res.json(JSON.parse(repaired));
     } catch (error) {
         console.error("Quiz generation error:", error);
         res.status(500).json({ error: "Failed to generate quiz: " + error.message });
     }
 });
 
-// --- GENERATE NEURAL SUMMARY (Summary + Quiz + Exam) ---
+// Helper for JSON repair
+const repairJSON = (str) => {
+    let json = str.trim();
+    if (json.startsWith('```json')) json = json.replace(/```json/g, '').replace(/```/g, '').trim();
+    
+    // Fix unterminated string
+    let openQuotes = 0;
+    for (let i = 0; i < json.length; i++) {
+        if (json[i] === '"' && json[i-1] !== '\\') openQuotes++;
+    }
+    if (openQuotes % 2 !== 0) json += '"';
+
+    // Fix missing brackets
+    const stack = [];
+    for (let i = 0; i < json.length; i++) {
+        if (json[i] === '{') stack.push('}');
+        else if (json[i] === '[') stack.push(']');
+        else if (json[i] === '}' || json[i] === ']') {
+            if (stack.length > 0 && stack[stack.length - 1] === json[i]) {
+                stack.pop();
+            }
+        }
+    }
+    while (stack.length > 0) {
+        json += stack.pop();
+    }
+    return json;
+};
+
+// --- GENERATE NEURAL SUMMARY ---
 app.post('/api/generate-neural-summary', async (req, res) => {
     const { documentContent, title, documentId, userId } = req.body;
     
@@ -245,62 +209,138 @@ app.post('/api/generate-neural-summary', async (req, res) => {
             ],
             model: "llama-3.3-70b-versatile",
             temperature: 0.4,
-            max_tokens: 4096,
+            max_tokens: 8192,
         });
 
         let responseText = completion.choices[0]?.message?.content || "{}";
-        console.log("AI Response received (length):", responseText.length);
         
-        // Improved JSON extraction
         const extractJSON = (text) => {
             try {
-                // Try direct parse first
                 return JSON.parse(text.replace(/```json/g, '').replace(/```/g, '').trim());
             } catch (e) {
-                // Try finding JSON object in string
-                const start = text.indexOf('{');
-                const end = text.lastIndexOf('}');
-                if (start !== -1 && end !== -1) {
-                    try {
-                        return JSON.parse(text.substring(start, end + 1));
-                    } catch (innerE) {
-                        throw new Error("JSON structure is incomplete or invalid.");
+                try {
+                    const repaired = repairJSON(text);
+                    return JSON.parse(repaired);
+                } catch (repairError) {
+                    const start = text.indexOf('{');
+                    const end = text.lastIndexOf('}');
+                    if (start !== -1 && end !== -1) {
+                        try {
+                            return JSON.parse(text.substring(start, end + 1));
+                        } catch (innerE) {
+                            throw new Error("JSON structure is incomplete.");
+                        }
                     }
+                    throw repairError;
                 }
-                throw e;
             }
         };
-        
-        try {
-            const data = extractJSON(responseText);
-            console.log("JSON parsed successfully.");
-            
-            // If Supabase is available, save it
-            if (supabase && userId && documentId) {
-                const { error: dbError } = await supabase.from('neural_summaries').insert([{
-                    user_id: userId,
-                    document_id: documentId,
-                    title: `Neural Summary: ${title}`,
-                    summary_text: data.summary,
-                    quiz_data: data.quiz,
-                    exam_data: data.exam
-                }]);
-                
-                if (dbError) {
-                    console.error("Supabase Database Error:", dbError);
-                    // Continue even if database save fails, to return data to user
-                } else {
-                    console.log("Neural Summary saved to Supabase.");
-                }
-            }
 
-            res.json(data);
-        } catch (parseError) {
-            console.error("Neural Summary JSON Parse Error. Raw content:", responseText);
-            res.status(500).json({ error: "Failed to parse AI response: " + parseError.message });
+        const data = extractJSON(responseText);
+        
+        if (supabase && userId && documentId) {
+            await supabase.from('neural_summaries').insert([{
+                user_id: userId,
+                document_id: documentId,
+                title: `Neural Summary: ${title}`,
+                summary_text: data.summary,
+                quiz_data: data.quiz,
+                exam_data: data.exam
+            }]);
         }
+
+        res.json(data);
     } catch (error) {
-        console.error("Neural Summary Generation Error:", error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// --- GENERATE MORE QUIZ ---
+app.post('/api/generate-more-quiz', async (req, res) => {
+    const { documentContent, title, existingQuestions = [], count = 5 } = req.body;
+    try {
+        const prompt = `Based on "${title}", generate ${count} additional quiz questions. Avoid: ${existingQuestions.join(' | ')}. Return ONLY JSON array.`;
+        const completion = await groq.chat.completions.create({
+            messages: [{ role: "system", content: "JSON-only bot." }, { role: "user", content: prompt }],
+            model: "llama-3.3-70b-versatile",
+            temperature: 0.4,
+            max_tokens: 3000,
+        });
+        const repaired = repairJSON(completion.choices[0]?.message?.content || "[]");
+        res.json(JSON.parse(repaired));
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// --- GENERATE MORE EXAM ---
+app.post('/api/generate-more-exam', async (req, res) => {
+    const { documentContent, title, existingQuestions = [], count = 5 } = req.body;
+    try {
+        const prompt = `Based on "${title}", generate ${count} additional exam questions. Avoid: ${existingQuestions.join(' | ')}. Return ONLY JSON array.`;
+        const completion = await groq.chat.completions.create({
+            messages: [{ role: "system", content: "JSON-only bot." }, { role: "user", content: prompt }],
+            model: "llama-3.3-70b-versatile",
+            temperature: 0.4,
+            max_tokens: 3000,
+        });
+        const repaired = repairJSON(completion.choices[0]?.message?.content || "[]");
+        res.json(JSON.parse(repaired));
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// --- VISION: SCAN TO FLASHCARDS ---
+app.post('/api/vision-to-cards', async (req, res) => {
+    const { image, userId } = req.body;
+    
+    if (!OPENAI_API_KEY) return res.status(503).json({ error: "Vision core offline (API Key missing)" });
+
+    try {
+        const response = await openai.chat.completions.create({
+            model: "gpt-4o",
+            messages: [
+                {
+                    role: "user",
+                    content: [
+                        { type: "text", text: "Analyze this textbook page. Extract the most important academic concepts and return them ONLY as a JSON array of flashcards. Format: [{\"question\": \"...\", \"answer\": \"...\", \"difficulty\": \"medium\"}]" },
+                        {
+                            type: "image_url",
+                            image_url: { "url": image },
+                        },
+                    ],
+                },
+            ],
+            max_tokens: 2000,
+        });
+
+        const content = response.choices[0].message.content;
+        const extractJSON = (text) => {
+            const start = text.indexOf('[');
+            const end = text.lastIndexOf(']');
+            if (start !== -1 && end !== -1) {
+                return JSON.parse(text.substring(start, end + 1));
+            }
+            throw new Error("No JSON array found");
+        };
+
+        const cards = extractJSON(content);
+
+        // Save to Supabase if requested
+        if (supabase && userId) {
+            const cardsToInsert = cards.map(c => ({
+                user_id: userId,
+                question: c.question,
+                answer: c.answer,
+                difficulty: c.difficulty || 'medium'
+            }));
+            await supabase.from('flashcards').insert(cardsToInsert);
+        }
+
+        res.json({ success: true, count: cards.length, cards });
+    } catch (error) {
+        console.error("Vision Error:", error);
         res.status(500).json({ error: error.message });
     }
 });

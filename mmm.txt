@@ -1,0 +1,199 @@
+-- ======================================================
+-- NEURAL STUDY AI - MASTER DATABASE INITIALIZATION
+-- ======================================================
+
+-- 1. EXTENSIONS & SCHEMA REFINEMENT
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS email text;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS phone text;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_admin boolean DEFAULT false;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_banned boolean DEFAULT false;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS avatar_url text;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS has_downloaded_desktop boolean DEFAULT false;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS focus_growth_points integer DEFAULT 0;
+
+-- 2. CORE TABLE DEFINITIONS
+CREATE TABLE IF NOT EXISTS public.documents (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  title text NOT NULL,
+  content text NOT NULL,
+  file_url text,
+  file_type text NOT NULL DEFAULT 'text',
+  created_at timestamptz DEFAULT now() NOT NULL,
+  updated_at timestamptz DEFAULT now() NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.flashcards (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  document_id uuid REFERENCES public.documents(id) ON DELETE SET NULL,
+  question text NOT NULL,
+  answer text NOT NULL,
+  difficulty text DEFAULT 'medium' CHECK (difficulty IN ('easy', 'medium', 'hard')),
+  mastery_level integer DEFAULT 0 CHECK (mastery_level >= 0 AND mastery_level <= 5),
+  last_reviewed timestamptz,
+  created_at timestamptz DEFAULT now() NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.quizzes (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  document_id uuid REFERENCES public.documents(id) ON DELETE SET NULL,
+  title text NOT NULL,
+  questions jsonb NOT NULL DEFAULT '[]'::jsonb,
+  total_questions integer DEFAULT 0,
+  created_at timestamptz DEFAULT now() NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.neural_summaries (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  document_id uuid REFERENCES public.documents(id) ON DELETE CASCADE,
+  title text NOT NULL,
+  summary_text text NOT NULL,
+  quiz_data jsonb DEFAULT '[]'::jsonb,
+  exam_data jsonb DEFAULT '[]'::jsonb,
+  created_at timestamptz DEFAULT now() NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.resumes (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    title TEXT DEFAULT 'Untitled Resume',
+    content JSONB DEFAULT '{}',
+    template_id TEXT,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.daily_tasks (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  task_text text NOT NULL,
+  is_completed boolean DEFAULT false,
+  scheduled_date date DEFAULT CURRENT_DATE NOT NULL,
+  scheduled_time time,
+  notification_sent boolean DEFAULT false,
+  created_at timestamptz DEFAULT now() NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.support_messages (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+    email TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    message TEXT NOT NULL,
+    status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'resolved', 'archived')),
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.system_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT,
+    description TEXT,
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- 3. SECURITY & RLS POLICIES
+ALTER TABLE public.documents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.flashcards ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.quizzes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.neural_summaries ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.daily_tasks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.resumes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.support_messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.system_settings ENABLE ROW LEVEL SECURITY;
+
+-- Dynamic Policy Creation
+DO $$ BEGIN
+  -- Documents
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'documents' AND policyname = 'Users view own docs') THEN
+    CREATE POLICY "Users view own docs" ON documents FOR SELECT TO authenticated USING (auth.uid() = user_id);
+  END IF;
+  
+  -- Resumes
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'resumes' AND policyname = 'Users manage own resumes') THEN
+    CREATE POLICY "Users manage own resumes" ON public.resumes FOR ALL USING (auth.uid() = user_id);
+  END IF;
+
+  -- Support Messages
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'support_messages' AND policyname = 'Allow individual insert') THEN
+    CREATE POLICY "Allow individual insert" ON public.support_messages FOR INSERT WITH CHECK (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'support_messages' AND policyname = 'Allow admin select') THEN
+    CREATE POLICY "Allow admin select" ON public.support_messages FOR SELECT USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND is_admin = true));
+  END IF;
+
+  -- System Settings
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'system_settings' AND policyname = 'Admins manage settings') THEN
+    CREATE POLICY "Admins manage settings" ON public.system_settings FOR ALL USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND is_admin = true));
+  END IF;
+END $$;
+
+-- 4. LOGIC (FUNCTIONS & TRIGGERS)
+
+-- Global Profile Sync Trigger
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger AS $$
+BEGIN
+  INSERT INTO public.profiles (id, username, email, phone, avatar_url, stars_count, is_admin)
+  VALUES (
+    new.id, 
+    COALESCE(new.raw_user_meta_data->>'username', SPLIT_PART(new.email, '@', 1)), 
+    new.email,
+    new.raw_user_meta_data->>'phone',
+    new.raw_user_meta_data->>'avatar_url',
+    0,
+    CASE WHEN new.email = 'aliopooopp3@gmail.com' THEN true ELSE false END
+  );
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- Star Logic
+CREATE OR REPLACE FUNCTION public.increment_stars(user_id uuid)
+RETURNS void AS $$
+BEGIN
+  UPDATE public.profiles SET stars_count = stars_count + 1 WHERE id = user_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Admin: Toggle Admin Status
+CREATE OR REPLACE FUNCTION public.toggle_admin_status(target_user_id uuid, new_status boolean)
+RETURNS boolean AS $$
+BEGIN
+  UPDATE public.profiles SET is_admin = new_status WHERE id = target_user_id;
+  RETURN new_status;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Admin: Delete User
+CREATE OR REPLACE FUNCTION public.admin_delete_user(target_user_id uuid)
+RETURNS void AS $$
+BEGIN
+  IF (SELECT is_admin FROM public.profiles WHERE id = auth.uid()) THEN
+    DELETE FROM auth.users WHERE id = target_user_id;
+  ELSE
+    RAISE EXCEPTION 'Access Denied: Admin privileges required.';
+  END IF;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 5. SEED DATA & PERMISSIONS
+INSERT INTO public.system_settings (key, value, description)
+VALUES 
+('GROQ_API_KEY', '', 'API Key for Groq Cloud'),
+('OPENAI_API_KEY', '', 'API Key for OpenAI'),
+('MONGO_URI', '', 'MongoDB Connection String (Optional)')
+ON CONFLICT (key) DO NOTHING;
+
+GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role, postgres, authenticated;
+
+-- Force Admin Status
+UPDATE public.profiles SET is_admin = true WHERE email = 'aliopooopp3@gmail.com';

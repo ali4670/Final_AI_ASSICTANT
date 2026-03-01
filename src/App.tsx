@@ -3,8 +3,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { TimerProvider } from './contexts/TimerContext';
-import { SpotifyProvider } from './contexts/SpotifyContext';
-
 import Login from './components/Login';
 import Signup from './components/Signup';
 
@@ -21,8 +19,16 @@ import Pomodoro from './Pages/Pomodoro';
 import Calendar from './Pages/Calendar';
 import Support from './Pages/Support';
 import Settings from './Pages/Settings';
+import Resume from './Pages/Resume';
+import Journal from './Pages/Journal';
+import Leaderboard from './Pages/Leaderboard';
+import Admin from './Pages/Admin';
+import Presentation from './Pages/Presentation';
+import KnowledgeGraph from './Pages/KnowledgeGraph';
+import MasteryMap from './Pages/MasteryMap';
+import Trees from './Pages/Trees';
+import Vision from './Pages/Vision';
 import Navbar from './components/Nave';
-import MusicPlayer from './components/MusicPlayer';
 import PomodoroTimer from './components/PomodoroTimer';
 import AppBackground from './components/AppBackground';
 import { ArrowUp } from 'lucide-react';
@@ -45,6 +51,12 @@ export type Page =
     | 'journal'
     | 'leaderboard'
     | 'admin'
+    | 'resume'
+    | 'presentation'
+    | 'knowledgeGraph'
+    | 'masteryMap'
+    | 'trees'
+    | 'vision'
     ;
 
 function ScrollToTop() {
@@ -97,9 +109,7 @@ function AppContent() {
         }
 
         setCurrentPage(page as Page);
-        if (documentId) {
-            setSelectedDocumentId(documentId);
-        }
+        setSelectedDocumentId(documentId);
         window.scrollTo(0, 0);
     };
 
@@ -137,7 +147,6 @@ function AppContent() {
                 onNavigate={handleNavigate} 
             />
             <div className="relative z-[1000]">
-                <MusicPlayer onNavigate={handleNavigate} />
                 <PomodoroTimer onNavigate={handleNavigate} />
                 <ScrollToTop />
             </div>
@@ -204,6 +213,24 @@ function AppContent() {
                                 case 'admin':
                                     return <Admin onNavigate={handleNavigate} />;
 
+                                case 'presentation':
+                                    return <Presentation />;
+
+                                case 'knowledgeGraph':
+                                    return <KnowledgeGraph onNavigate={handleNavigate} />;
+
+                                case 'masteryMap':
+                                    return <MasteryMap onNavigate={handleNavigate} />;
+
+                                case 'trees':
+                                    return <Trees onNavigate={handleNavigate} />;
+
+                                case 'vision':
+                                    return <Vision onNavigate={handleNavigate} />;
+
+                                case 'resume':
+                                    return <Resume onNavigate={handleNavigate} />;
+
                                 case 'neuralSummary':
                                     return <NeuralSummary onNavigate={handleNavigate} documentId={selectedDocumentId} />;
 
@@ -223,9 +250,7 @@ function App() {
         <AuthProvider>
             <ThemeProvider>
                 <TimerProvider>
-                    <SpotifyProvider>
-                        <AppContent />
-                    </SpotifyProvider>
+                    <AppContent />
                 </TimerProvider>
             </ThemeProvider>
         </AuthProvider>
@@ -233,8 +258,5 @@ function App() {
 }
 
 import NeuralSummary from './components/NeuralSummary';
-import Journal from './Pages/Journal';
-import Leaderboard from './Pages/Leaderboard';
-import Admin from './Pages/Admin';
 import GuestRestrictionModal from './components/GuestRestrictionModal';
 export default App;

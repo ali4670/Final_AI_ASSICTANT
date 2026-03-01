@@ -97,7 +97,7 @@ const Hero: React.FC<HeroProps> = ({ onNavigate }) => {
       placeholder: "Technical verdict...",
       transmit: "Transmit",
       sent: "Transmitted",
-      copyright: "© 2026 NeuroStudy // Global Grid"
+      copyright: "© 2026 Neural Study // Global Grid"
     },
     ar: {
       system: "النظام العصبي متصل",
@@ -112,7 +112,7 @@ const Hero: React.FC<HeroProps> = ({ onNavigate }) => {
       placeholder: "الحكم التقني...",
       transmit: "إرسال",
       sent: "تم الإرسال",
-      copyright: "© 2026 NeuroStudy // الشبكة العالمية"
+      copyright: "© 2026 Neural Study // الشبكة العالمية"
     }
   }[language];
 
@@ -301,7 +301,7 @@ const Hero: React.FC<HeroProps> = ({ onNavigate }) => {
               <Brain className="text-white" size={28} />
             </div>
             <div className="flex flex-col text-left">
-                <span className={`font-black italic tracking-tighter text-2xl uppercase ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>NeuroStudy</span>
+                <span className={`font-black italic tracking-tighter text-2xl uppercase ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Neural Study</span>
                 <span className="text-[10px] font-black text-blue-600 uppercase tracking-[0.3em]">Grid Interface v2.0</span>
             </div>
           </div>

@@ -84,7 +84,7 @@ const GuestRestrictionModal: React.FC<GuestRestrictionModalProps> = ({ isOpen, o
 
                         <div className="mt-8 flex items-center justify-center gap-2 opacity-30">
                             <Sparkles size={12} />
-                            <span className="text-[8px] font-black uppercase tracking-[0.3em]">NeuroStudy Security Protocol</span>
+                            <span className="text-[8px] font-black uppercase tracking-[0.3em]">Neural Study Security Protocol</span>
                         </div>
                     </motion.div>
                 </div>

@@ -18,7 +18,9 @@ import {
   Activity,
   ListTodo,
   Star,
-  Map
+  Map,
+  Share2,
+  TreeDeciduous
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -63,7 +65,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
 
     useEffect(() => {
         const fetchDashboardData = async () => {
-            if (!user) return;
+            if (!user || !supabase) return;
             try {
                 // Fetch Stats
                 const { count: docsCount } = await supabase.from('documents').select('*', { count: 'exact', head: true }).eq('user_id', user.id);
@@ -91,19 +93,24 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
     }, [user]);
 
     const menuItems = [
-        { id: 'documents', title: t?.menu?.library?.title, icon: BookOpen, color: '#3b82f6', badge: 'Storage', desc: t?.menu?.library?.desc },
-        { id: 'chat', title: t?.menu?.chat?.title, icon: MessageSquare, color: '#6366f1', badge: 'AI Link', desc: t?.menu?.chat?.desc },
-        { id: 'journal', title: t?.menu?.journal?.title, icon: ListTodo, color: '#f59e0b', badge: 'Daily', desc: t?.menu?.journal?.desc },
-        { id: 'flashcards', title: t?.menu?.cards?.title, icon: Brain, color: '#a855f7', badge: 'Memory', desc: t?.menu?.cards?.desc },
-        { id: 'quizzes', title: t?.menu?.quiz?.title, icon: Trophy, color: '#ec4899', badge: 'Test', desc: t?.menu?.quiz?.desc },
-        { id: 'leaderboard', title: t?.menu?.leaderboard?.title, icon: Star, color: '#fbbf24', badge: 'Rank', desc: t?.menu?.leaderboard?.desc },
-        { id: 'studyTimeline', title: t?.menu?.roadmap?.title, icon: Clock, color: '#10b981', badge: 'Plan', desc: t?.menu?.roadmap?.desc },
-        { id: 'pomodoro', title: t?.menu?.focus?.title, icon: Zap, color: '#ef4444', badge: 'Deep', desc: t?.menu?.focus?.desc }
+        { id: 'documents', title: t?.menu?.library?.title || 'Library', icon: BookOpen, color: '#3b82f6', badge: 'Storage', desc: t?.menu?.library?.desc || 'Manage your documents' },
+        { id: 'chat', title: t?.menu?.chat?.title || 'Chat', icon: MessageSquare, color: '#6366f1', badge: 'AI Link', desc: t?.menu?.chat?.desc || 'Neural Sync Dialogue' },
+        { id: 'journal', title: t?.menu?.journal?.title || 'Journal', icon: ListTodo, color: '#f59e0b', badge: 'Daily', desc: t?.menu?.journal?.desc || 'Neural Task Tracking' },
+        { id: 'flashcards', title: t?.menu?.cards?.title || 'Cards', icon: Brain, color: '#a855f7', badge: 'Memory', desc: t?.menu?.cards?.desc || 'Recall Nodes' },
+        { id: 'quizzes', title: t?.menu?.quiz?.title || 'Quiz', icon: Trophy, color: '#ec4899', badge: 'Test', desc: t?.menu?.quiz?.desc || 'Evaluation Protocols' },
+        { id: 'leaderboard', title: t?.menu?.leaderboard?.title || 'Ranks', icon: Star, color: '#fbbf24', badge: 'Rank', desc: t?.menu?.leaderboard?.desc || 'Hall of Fame' },
+        { id: 'studyTimeline', title: t?.menu?.roadmap?.title || 'Roadmap', icon: Clock, color: '#10b981', badge: 'Plan', desc: t?.menu?.roadmap?.desc || 'Temporal Map' },
+        { id: 'resume', title: t?.menu?.resume?.title || 'CV', icon: FileText, color: '#3b82f6', badge: 'Career', desc: t?.menu?.resume?.desc || 'Resume Builder' },
+        { id: 'knowledgeGraph', title: t?.menu?.graph?.title || 'Web', icon: Share2, color: '#6366f1', badge: '3D Web', desc: t?.menu?.graph?.desc || 'Knowledge Graph' },
+        { id: 'masteryMap', title: t?.menu?.mastery?.title || 'Map', icon: Brain, color: '#8b5cf6', badge: 'Cognitive', desc: t?.menu?.mastery?.desc || 'Cognitive Mastery Map' },
+        { id: 'trees', title: t?.menu?.trees?.title || 'Trees', icon: TreeDeciduous, color: '#10b981', badge: 'Biological', desc: t?.menu?.trees?.desc || 'Botanical focus registry' },
+        { id: 'neuralSummary', title: 'Neural Synthesis', icon: BookOpen, color: '#3b82f6', badge: 'Analysis', desc: 'Deep synthesis and structured analysis of your document fragments.' },
+        { id: 'pomodoro', title: t?.menu?.focus?.title || 'Focus', icon: Zap, color: '#ef4444', badge: 'Deep', desc: t?.menu?.focus?.desc || 'Focus Core' }
     ];
 
     const filteredMenu = menuItems.filter(item => 
-        item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.desc.toLowerCase().includes(searchQuery.toLowerCase())
+        (item.title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (item.desc || '').toLowerCase().includes(searchQuery.toLowerCase())
     );
 
     return (
@@ -439,7 +446,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
                         {language === 'ar' ? 'زمن الاستجابة: 12ملي ثانية' : 'Latency: 12ms'}
                     </span>
                 </div>
-                <p className={`text-[9px] font-black opacity-30 uppercase tracking-[0.5em] ${theme === 'dark' ? 'text-white' : 'text-slate-950'}`}>NeuroStudy Neural Interface // v2.0.42</p>
+                <p className={`text-[9px] font-black opacity-30 uppercase tracking-[0.5em] ${theme === 'dark' ? 'text-white' : 'text-slate-950'}`}>Neural Study Neural Interface // v2.0.42</p>
             </div>
         </div>
     );

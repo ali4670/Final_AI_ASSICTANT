@@ -64,9 +64,9 @@ const Navbar: React.FC<NavbarProps> = ({ onNavigate, onVisibilityChange }) => {
                         <span className={`text-lg font-black italic tracking-tighter uppercase leading-none ${
                             theme === 'dark' ? 'text-white' : 'text-slate-900'
                         }`}>
-                            AI <span className="text-blue-600">STUDY</span>
+                            NEURAL <span className="text-blue-600">STUDY</span>
                         </span>
-                        <span className="text-[10px] font-black text-gray-500 uppercase tracking-[0.3em]">Assistant v2</span>
+                        <span className="text-[10px] font-black text-gray-500 uppercase tracking-[0.3em]">Grid v2.4</span>
                     </div>
                 </motion.div>
 
@@ -78,6 +78,7 @@ const Navbar: React.FC<NavbarProps> = ({ onNavigate, onVisibilityChange }) => {
                         { id: 'chat', label: 'Chat' },
                         { id: 'flashcards', label: 'Cards' },
                         { id: 'quizzes', label: 'Quiz' },
+                        { id: 'neuralSummary', label: 'Synthesis' },
                         { id: 'studyTimeline', label: 'Journal page' },
                         { id: 'pomodoro', label: 'Focus' },
                         ...(isAdmin ? [{ id: 'admin', label: 'Admin' }] : []),
