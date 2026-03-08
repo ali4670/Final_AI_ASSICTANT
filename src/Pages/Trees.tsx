@@ -1,188 +1,394 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-    Leaf, ArrowLeft, ShieldCheck, Zap, 
-    Wind, Sun, Loader, Award, Sprout,
-    TreeDeciduous, Database, Activity
+    ArrowLeft, Database, Activity,
+    Trash2, Search, Filter, Layers, 
+    Zap, Leaf, Home, Users, Sparkles as SparklesIcon,
+    ChevronRight, Info, Plus, Hexagon
 } from 'lucide-react';
+import { Canvas, useFrame } from '@react-three/fiber';
+import { 
+    OrbitControls, PerspectiveCamera, Environment, Float, 
+    ContactShadows, Stage, Sparkles, Cloud, MeshDistortMaterial, 
+    Sphere, PointMaterial, Points, PresentationControls
+} from '@react-three/drei';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { useTimer } from '../contexts/TimerContext';
-import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Stars, Float, ContactShadows, PerspectiveCamera } from '@react-three/drei';
-import FocusBiome from '../components/3D/FocusBiome';
+import { supabase } from '../lib/supabase';
+import { 
+    Tree, Grass, House, Farmer, Bush, Monolith, 
+    Windmill, Fountain, RobotFarmer, Barn, Fence, Sheep 
+} from '../components/3D/GardenItems';
+import * as THREE from 'three';
+
+const BackgroundNodes = () => {
+    const points = useMemo(() => {
+        const p = new Float32Array(500 * 3);
+        for (let i = 0; i < 500; i++) {
+            p[i*3] = (Math.random() - 0.5) * 30;
+            p[i*3+1] = (Math.random() - 0.5) * 30;
+            p[i*3+2] = (Math.random() - 0.5) * 30;
+        }
+        return p;
+    }, []);
+
+    const ref = useRef<any>();
+    useFrame((state) => {
+        if (ref.current) {
+            ref.current.rotation.y = state.clock.getElapsedTime() * 0.05;
+            ref.current.rotation.z = state.clock.getElapsedTime() * 0.02;
+        }
+    });
+
+    return (
+        <Points ref={ref} positions={points} stride={3}>
+            <PointMaterial
+                transparent
+                color="#10b981"
+                size={0.05}
+                sizeAttenuation={true}
+                depthWrite={false}
+                opacity={0.2}
+            />
+        </Points>
+    );
+};
+
+const RegistryItem3D = ({ type, id }: { type: string, id: string }) => {
+    const renderModel = () => {
+        const props = { position: [0, 0, 0] as [number, number, number], seed: id };
+        switch (type) {
+            case 'tree': return <Tree {...props} />;
+            case 'house': return <House {...props} />;
+            case 'robot': return <RobotFarmer {...props} />;
+            case 'barn': return <Barn position={[0,0,0]} />;
+            case 'windmill': return <Windmill position={[0,0,0]} />;
+            case 'sheep': return <Sheep position={[0,0,0]} />;
+            case 'fountain': return <Fountain position={[0,0,0]} />;
+            case 'monolith': return <Monolith position={[0,0,0]} />;
+            case 'bush': return <Bush position={[0,0,0]} />;
+            case 'fence': return <Fence position={[0,0,0]} />;
+            default: return <Tree {...props} />;
+        }
+    };
+
+    return (
+        <Canvas shadows camera={{ position: [5, 5, 5], fov: 40 }}>
+            <ambientLight intensity={0.5} />
+            <spotLight position={[10, 10, 10]} angle={0.15} penumbra={1} intensity={1} castShadow />
+            <pointLight position={[-10, -10, -10]} intensity={0.5} color="#10b981" />
+            
+            <Suspense fallback={null}>
+                <PresentationControls
+                    global
+                    config={{ mass: 2, tension: 500 }}
+                    snap={{ mass: 4, tension: 1500 }}
+                    rotation={[0, 0.3, 0]}
+                    polar={[-Math.PI / 3, Math.PI / 3]}
+                    azimuth={[-Math.PI / 1.4, Math.PI / 1.4]}
+                >
+                    <Float speed={2} rotationIntensity={0.5} floatIntensity={0.5}>
+                        <group scale={1.2}>
+                            {renderModel()}
+                        </group>
+                    </Float>
+                </PresentationControls>
+                
+                <ContactShadows 
+                    position={[0, -1.5, 0]} 
+                    opacity={0.4} 
+                    scale={10} 
+                    blur={2.5} 
+                    far={4} 
+                />
+                
+                <Environment preset="forest" />
+                <Sparkles count={40} scale={5} size={2} speed={0.4} color="#10b981" opacity={0.2} />
+            </Suspense>
+            
+            <OrbitControls enableZoom={false} enablePan={false} />
+        </Canvas>
+    );
+};
 
 const Trees: React.FC<{ onNavigate: (p: string) => void }> = ({ onNavigate }) => {
     const { user } = useAuth();
     const { theme } = useTheme();
-    const { growthPoints } = useTimer();
+    const [items, setItems] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [filter, setFilter] = useState<'all' | 'nature' | 'structures' | 'units'>('all');
+    const [searchQuery, setSearchQuery] = useState('');
 
-    useEffect(() => {
-        const timer = setTimeout(() => setLoading(false), 1500);
-        return () => clearTimeout(timer);
-    }, []);
+    useEffect(() => { fetchRegistry(); }, [user]);
 
-    const getStageName = (points: number) => {
-        if (points <= 10) return "Neural Seed";
-        if (points <= 30) return "Active Sprout";
-        if (points <= 60) return "Developed Flora";
-        return "Grand Neural Tree";
+    const fetchRegistry = async () => {
+        if (!user) return;
+        try {
+            setLoading(true);
+            const { data } = await supabase.from('garden_items').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
+            setItems(data || []);
+        } catch (e) { console.error(e); } finally { setLoading(false); }
     };
 
-    const getStageDesc = (points: number) => {
-        if (points <= 10) return "The potential for massive knowledge resides within this dormant core.";
-        if (points <= 30) return "Early cognitive patterns are beginning to take physical form.";
-        if (points <= 60) return "Significant focus investment has resulted in a stable intellectual structure.";
-        return "Absolute mastery. A towering monument to your sustained focus and discipline.";
+    const deleteItem = async (id: string) => {
+        await supabase.from('garden_items').delete().eq('id', id);
+        setItems(items.filter(i => i.id !== id));
     };
+
+    const categories = {
+        nature: ['tree', 'grass', 'bush'],
+        structures: ['house', 'barn', 'windmill', 'fountain', 'monolith', 'fence'],
+        units: ['farmer', 'robot', 'sheep']
+    };
+
+    const filteredItems = useMemo(() => {
+        return items.filter(item => {
+            const matchesSearch = item.item_type.toLowerCase().includes(searchQuery.toLowerCase());
+            const matchesFilter = filter === 'all' || 
+                (filter === 'nature' && categories.nature.includes(item.item_type)) ||
+                (filter === 'structures' && categories.structures.includes(item.item_type)) ||
+                (filter === 'units' && categories.units.includes(item.item_type));
+            return matchesSearch && matchesFilter;
+        });
+    }, [items, filter, searchQuery]);
+
+    const stats = useMemo(() => ({
+        total: items.length,
+        nature: items.filter(i => categories.nature.includes(i.item_type)).length,
+        structures: items.filter(i => categories.structures.includes(i.item_type)).length,
+        units: items.filter(i => categories.units.includes(i.item_type)).length,
+    }), [items]);
 
     return (
-        <div className={`min-h-screen pt-24 pb-12 px-8 transition-colors duration-700 relative overflow-hidden ${theme === 'dark' ? 'bg-[#050505] text-white' : 'bg-emerald-50 text-slate-900'}`}>
+        <div className={`min-h-screen pt-24 pb-20 px-6 md:px-12 transition-colors duration-1000 relative overflow-hidden ${theme === 'dark' ? 'bg-[#020202] text-white' : 'bg-[#f0f9f4] text-slate-900'}`}>
             
-            {/* Background Elements */}
-            <div className="absolute inset-0 z-0 opacity-20 pointer-events-none">
-                <div className={`absolute top-0 left-0 w-full h-full bg-gradient-to-b ${theme === 'dark' ? 'from-emerald-900/10 to-transparent' : 'from-emerald-200/20 to-transparent'}`} />
+            {/* Ambient Neural Background */}
+            <div className="absolute inset-0 z-0 opacity-40">
+                <Canvas camera={{ position: [0, 0, 15], fov: 45 }}>
+                    <BackgroundNodes />
+                    <Float speed={1} rotationIntensity={0.2} floatIntensity={0.2}>
+                        <Sphere args={[8, 64, 64]} position={[10, -5, -10]}>
+                            <MeshDistortMaterial 
+                                color="#10b981" 
+                                speed={1} 
+                                distort={0.3} 
+                                wireframe 
+                                opacity={0.05} 
+                                transparent 
+                            />
+                        </Sphere>
+                    </Float>
+                </Canvas>
             </div>
 
             <div className="max-w-7xl mx-auto relative z-10">
-                <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-8 mb-16">
-                    <div className="space-y-4">
+                
+                <header className="mb-24 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-12">
+                    <div className="space-y-6">
                         <motion.button 
-                            whileHover={{ x: -5 }}
-                            onClick={() => onNavigate('dashboard')}
-                            className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.3em] opacity-40 hover:opacity-100 transition-all"
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            onClick={() => onNavigate('dashboard')} 
+                            className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.4em] text-emerald-500/60 hover:text-emerald-500 transition-all"
                         >
                             <ArrowLeft size={14} /> Back to Command
                         </motion.button>
-                        <div className="flex items-center gap-6">
-                            <div className={`p-4 rounded-3xl border shadow-2xl ${theme === 'dark' ? 'bg-emerald-600/10 border-emerald-500/20 text-emerald-500' : 'bg-emerald-50 border-emerald-100 text-emerald-600'}`}>
-                                <TreeDeciduous size={32} />
+                        
+                        <div className="space-y-4">
+                            <div className="flex items-center gap-6">
+                                <div className="w-20 h-20 bg-emerald-600 rounded-[2.5rem] flex items-center justify-center shadow-[0_0_50px_rgba(16,185,129,0.3)] rotate-6">
+                                    <Database className="text-white -rotate-6" size={36} />
+                                </div>
+                                <div>
+                                    <h1 className="text-6xl md:text-8xl font-black italic uppercase tracking-tighter leading-none mb-2">Registry</h1>
+                                    <p className="opacity-40 font-black uppercase tracking-[0.6em] text-[10px]">Biological & Structural Archives</p>
+                                </div>
                             </div>
-                            <h1 className="text-6xl md:text-8xl font-black italic uppercase tracking-tighter leading-none">Botanical <br /> <span className="text-emerald-500">Registry</span></h1>
                         </div>
                     </div>
 
-                    <div className="flex gap-4">
-                        <div className="px-8 py-6 bg-white/5 border border-white/10 rounded-[2.5rem] backdrop-blur-xl flex flex-col items-end">
-                            <span className="text-[8px] font-black uppercase tracking-[0.4em] opacity-30 mb-1">Global Growth Index</span>
-                            <span className="text-4xl font-black italic tracking-tighter text-emerald-500">{growthPoints} PX</span>
+                    <div className="flex flex-col md:flex-row items-center gap-6 w-full xl:w-auto">
+                        <div className="flex items-center gap-2 bg-white/5 border border-white/5 p-2 rounded-[2rem] backdrop-blur-xl w-full md:w-auto overflow-x-auto no-scrollbar">
+                            {(['all', 'nature', 'structures', 'units'] as const).map(f => (
+                                <button
+                                    key={f}
+                                    onClick={() => setFilter(f)}
+                                    className={`px-8 py-4 rounded-2xl text-[9px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${
+                                        filter === f 
+                                        ? 'bg-emerald-600 text-white shadow-[0_0_30px_rgba(16,185,129,0.4)]' 
+                                        : 'text-gray-500 hover:text-white hover:bg-white/5'
+                                    }`}
+                                >
+                                    {f}
+                                </button>
+                            ))}
+                        </div>
+                        <div className="relative group w-full md:w-[300px]">
+                            <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-emerald-500/40 group-focus-within:text-emerald-500 transition-colors" size={18} />
+                            <input 
+                                type="text" 
+                                placeholder="Neural Search..." 
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="w-full bg-white/5 border border-white/5 rounded-[2rem] py-5 pl-16 pr-8 text-[10px] font-black uppercase tracking-widest outline-none focus:border-emerald-500/40 focus:bg-white/[0.08] transition-all placeholder:text-gray-700"
+                            />
                         </div>
                     </div>
                 </header>
 
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-stretch">
-                    {/* 3D Biological Viewport */}
-                    <div className={`lg:col-span-7 rounded-[4rem] border relative overflow-hidden min-h-[600px] shadow-2xl ${
-                        theme === 'dark' ? 'bg-[#0D0D0D] border-white/5 shadow-emerald-900/5' : 'bg-white border-emerald-100 shadow-emerald-500/5'
-                    }`}>
-                        <Canvas shadows>
-                            <PerspectiveCamera makeDefault position={[0, 2, 8]} fov={45} />
-                            <OrbitControls enablePan={false} minDistance={4} maxDistance={12} />
-                            <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
-                            
-                            <ambientLight intensity={0.4} />
-                            <spotLight position={[10, 10, 10]} angle={0.15} penumbra={1} intensity={1} castShadow />
-                            <pointLight position={[-10, -10, -10]} color="emerald" intensity={0.5} />
-
-                            <Float speed={1.5} rotationIntensity={0.2} floatIntensity={0.5}>
-                                <FocusBiome growth={growthPoints} />
-                            </Float>
-
-                            <ContactShadows position={[0, -0.5, 0]} opacity={0.4} scale={10} blur={2} far={4.5} />
-                        </Canvas>
-
-                        <div className="absolute top-8 left-8 p-6 bg-black/40 backdrop-blur-xl rounded-3xl border border-white/10">
-                            <div className="flex items-center gap-3 mb-2">
-                                <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-                                <span className="text-[9px] font-black uppercase tracking-[0.4em] text-emerald-500">Live Bio-Feed</span>
-                            </div>
-                            <p className="text-xl font-black italic uppercase tracking-tight">{getStageName(growthPoints)}</p>
-                        </div>
-
-                        <div className="absolute bottom-8 right-8 flex gap-3">
-                            <div className="p-4 bg-white/5 border border-white/10 backdrop-blur-md rounded-2xl">
-                                <Wind className="text-white/40" size={20} />
-                            </div>
-                            <div className="p-4 bg-white/5 border border-white/10 backdrop-blur-md rounded-2xl">
-                                <Sun className="text-yellow-500/40" size={20} />
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Evolutionary Data */}
-                    <div className="lg:col-span-5 space-y-8">
-                        <motion.div 
+                {/* Biological HUD Stats */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-20">
+                    {[
+                        { label: 'Neural Flora', val: stats.nature, icon: Leaf, color: 'emerald' },
+                        { label: 'Core Structs', val: stats.structures, icon: Home, color: 'amber' },
+                        { label: 'Living Units', val: stats.units, icon: Users, color: 'blue' },
+                        { label: 'Total Nodes', val: stats.total, icon: Database, color: 'purple' }
+                    ].map((s, i) => (
+                        <motion.div
+                            key={i}
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
-                            className={`p-10 rounded-[3.5rem] border ${theme === 'dark' ? 'bg-[#0D0D0D] border-white/5' : 'bg-white border-emerald-50'}`}
+                            transition={{ delay: i * 0.1 }}
+                            className={`p-10 rounded-[3.5rem] border transition-all ${
+                                theme === 'dark' ? 'bg-[#0D0D0D] border-white/5' : 'bg-white border-slate-100'
+                            }`}
                         >
-                            <h3 className="text-[10px] font-black uppercase tracking-[0.5em] text-emerald-500 mb-6">Current Evolution</h3>
-                            <p className="text-3xl font-black italic uppercase tracking-tighter mb-4 leading-tight">{getStageName(growthPoints)}</p>
-                            <p className="text-sm font-medium opacity-50 leading-relaxed mb-8">{getStageDesc(growthPoints)}</p>
-                            
-                            <div className="space-y-6">
-                                <div className="flex justify-between items-end mb-2">
-                                    <span className="text-[9px] font-black uppercase tracking-widest opacity-30">Next Phase Requirement</span>
-                                    <span className="text-xs font-black italic">
-                                        {growthPoints < 11 ? "11" : growthPoints < 31 ? "31" : growthPoints < 61 ? "61" : "∞"} PX
-                                    </span>
-                                </div>
-                                <div className="h-3 w-full bg-white/5 rounded-full overflow-hidden border border-white/5">
-                                    <motion.div 
-                                        initial={{ width: 0 }}
-                                        animate={{ width: `${Math.min((growthPoints / 100) * 100, 100)}%` }}
-                                        className="h-full bg-gradient-to-r from-emerald-600 to-emerald-400"
-                                    />
-                                </div>
+                            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-6 bg-${s.color}-600/10 text-${s.color}-500 border border-${s.color}-500/20`}>
+                                <s.icon size={24} />
                             </div>
+                            <p className="text-4xl font-black italic uppercase tracking-tighter mb-1 leading-none">{s.val}</p>
+                            <p className="text-[9px] font-black uppercase tracking-widest opacity-40">{s.label}</p>
                         </motion.div>
-
-                        <div className="grid grid-cols-2 gap-6">
-                            <motion.div 
-                                whileHover={{ y: -5 }}
-                                className={`p-8 rounded-[2.5rem] border ${theme === 'dark' ? 'bg-[#0D0D0D] border-white/5' : 'bg-white border-emerald-50 shadow-sm'}`}
-                            >
-                                <Award className="text-yellow-500 mb-4" size={24} />
-                                <h4 className="text-[9px] font-black uppercase tracking-widest opacity-30 mb-1">Focus Yield</h4>
-                                <p className="text-2xl font-black italic tracking-tighter">{Math.floor(growthPoints / 10)} Sessions</p>
-                            </motion.div>
-                            <motion.div 
-                                whileHover={{ y: -5 }}
-                                className={`p-8 rounded-[2.5rem] border ${theme === 'dark' ? 'bg-[#0D0D0D] border-white/5' : 'bg-white border-emerald-50 shadow-sm'}`}
-                            >
-                                <Activity className="text-blue-500 mb-4" size={24} />
-                                <h4 className="text-[9px] font-black uppercase tracking-widest opacity-30 mb-1">Neural Health</h4>
-                                <p className="text-2xl font-black italic tracking-tighter">Optimum</p>
-                            </motion.div>
-                        </div>
-
-                        <div className={`p-8 rounded-[3rem] border border-dashed flex items-center justify-center gap-4 ${theme === 'dark' ? 'border-white/10' : 'border-emerald-200'}`}>
-                            <div className="text-center">
-                                <Sprout className="mx-auto mb-3 opacity-20" size={32} />
-                                <p className="text-[9px] font-black uppercase tracking-[0.4em] opacity-20">New Bio-Variants Loading...</p>
-                            </div>
-                        </div>
-                    </div>
+                    ))}
                 </div>
-            </div>
 
-            <AnimatePresence>
-                {loading && (
-                    <motion.div 
-                        exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-[500] bg-[#050505] flex flex-col items-center justify-center gap-6"
-                    >
-                        <div className="relative">
-                            <div className="w-24 h-24 border-4 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin" />
-                            <Leaf size={32} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-emerald-500" />
+                {loading ? (
+                    <div className="py-40 flex flex-col items-center justify-center gap-8">
+                        <div className="relative w-24 h-24">
+                            <motion.div 
+                                animate={{ rotate: 360 }} 
+                                transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                                className="absolute inset-0 border-t-4 border-emerald-600 rounded-full"
+                            />
+                            <motion.div 
+                                animate={{ rotate: -360 }} 
+                                transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+                                className="absolute inset-4 border-t-4 border-emerald-400/20 rounded-full"
+                            />
+                            <Database className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-emerald-500" size={32} />
                         </div>
-                        <p className="text-[10px] font-black uppercase tracking-[0.6em] animate-pulse">Syncing Botanical Registry</p>
+                        <p className="text-[10px] font-black uppercase tracking-[0.8em] animate-pulse">Syncing Botanical Grid</p>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+                        <AnimatePresence mode="popLayout">
+                            {filteredItems.map((item, i) => (
+                                <motion.div 
+                                    key={item.id}
+                                    layout
+                                    initial={{ opacity: 0, scale: 0.9 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    exit={{ opacity: 0, scale: 0.9 }}
+                                    transition={{ delay: i * 0.05 }}
+                                    className={`relative h-[500px] rounded-[4.5rem] border transition-all duration-700 group overflow-hidden ${
+                                        theme === 'dark' 
+                                        ? 'bg-[#0D0D0D] border-white/5 hover:border-emerald-500/40 shadow-2xl' 
+                                        : 'bg-white border-slate-100 hover:shadow-2xl hover:border-emerald-200'
+                                    }`}
+                                >
+                                    {/* 3D Model Layer */}
+                                    <div className="absolute inset-0 z-0">
+                                        <RegistryItem3D type={item.item_type} id={item.id} />
+                                    </div>
+
+                                    {/* UI Layer */}
+                                    <div className="absolute inset-0 p-10 flex flex-col justify-between z-10 pointer-events-none">
+                                        <div className="flex justify-between items-start pointer-events-auto">
+                                            <div className="flex flex-col gap-2">
+                                                <div className="px-5 py-2 bg-black/40 border border-white/10 rounded-2xl backdrop-blur-md flex items-center gap-3">
+                                                    <Hexagon size={12} className="text-emerald-500" />
+                                                    <span className="text-[9px] font-black uppercase tracking-[0.2em] text-white">{item.item_type}</span>
+                                                </div>
+                                                <div className="flex items-center gap-2 opacity-40 px-2">
+                                                    <Clock size={10} />
+                                                    <span className="text-[8px] font-bold tabular-nums uppercase">{new Date(item.created_at).toLocaleDateString()}</span>
+                                                </div>
+                                            </div>
+                                            <motion.button 
+                                                whileHover={{ scale: 1.1, backgroundColor: '#ef4444', color: '#fff' }}
+                                                onClick={() => deleteItem(item.id)}
+                                                className="p-4 bg-white/5 border border-white/5 text-red-500/60 rounded-2xl backdrop-blur-md opacity-0 group-hover:opacity-100 transition-all"
+                                            >
+                                                <Trash2 size={18} />
+                                            </motion.button>
+                                        </div>
+
+                                        <div className="space-y-4">
+                                            <div className="flex items-center gap-3 opacity-0 group-hover:opacity-100 transition-all translate-y-4 group-hover:translate-y-0 duration-500">
+                                                <div className="w-10 h-10 rounded-xl bg-emerald-600/20 border border-emerald-500/20 flex items-center justify-center">
+                                                    <SparklesIcon size={16} className="text-emerald-500" />
+                                                </div>
+                                                <p className="text-[9px] font-black uppercase tracking-widest text-white drop-shadow-lg">Neural Growth Sync Active</p>
+                                            </div>
+                                            <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden opacity-0 group-hover:opacity-100 transition-all delay-100">
+                                                <motion.div 
+                                                    initial={{ width: 0 }}
+                                                    animate={{ width: '100%' }}
+                                                    transition={{ duration: 2, repeat: Infinity }}
+                                                    className="h-full bg-emerald-600 shadow-[0_0_15px_rgba(16,185,129,0.8)]"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Overlay Shadow */}
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-60 group-hover:opacity-40 transition-opacity z-[5]" />
+                                </motion.div>
+                            ))}
+                        </AnimatePresence>
+                    </div>
+                )}
+
+                {/* Empty State */}
+                {!loading && filteredItems.length === 0 && (
+                    <motion.div 
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="py-40 text-center space-y-8"
+                    >
+                        <div className="w-24 h-24 bg-white/5 border border-white/5 rounded-[3rem] flex items-center justify-center mx-auto opacity-20">
+                            <Leaf size={48} />
+                        </div>
+                        <div className="space-y-2">
+                            <h3 className="text-3xl font-black italic uppercase tracking-tighter opacity-40">No Archives Found</h3>
+                            <p className="text-[10px] font-black uppercase tracking-[0.4em] opacity-20">Your botanical grid is awaiting synchronization</p>
+                        </div>
+                        <button 
+                            onClick={() => onNavigate('pomodoro')}
+                            className="px-10 py-5 bg-emerald-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-2xl shadow-emerald-600/20 flex items-center gap-3 mx-auto"
+                        >
+                            Start Focus Protocol <ChevronRight size={16} />
+                        </button>
                     </motion.div>
                 )}
-            </AnimatePresence>
+            </div>
+            
+            {/* Footer Latency */}
+            <div className="max-w-7xl mx-auto mt-32 pt-16 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-8 opacity-30">
+                <div className="flex items-center gap-6">
+                    <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+                        <span className="text-[9px] font-black uppercase tracking-widest">Botanical Engine Online</span>
+                    </div>
+                    <div className="w-px h-3 bg-white/10" />
+                    <span className="text-[9px] font-black uppercase tracking-widest">Flora Latency: 4ms</span>
+                </div>
+                <p className="text-[9px] font-black uppercase tracking-[0.5em]">Registry Archive // v2.4.9</p>
+            </div>
         </div>
     );
 };
+
+import { Clock } from 'lucide-react';
 
 export default Trees;

@@ -1,14 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
     Shield, Users, Trash2, Star, ArrowLeft, 
     Loader, Search, ShieldAlert, FileText, Activity,
-    Key, Phone, CheckCircle2, X, Eye, EyeOff, Mail, MessageSquare, Monitor, UserCircle
+    Key, Phone, CheckCircle2, X, Eye, EyeOff, Mail, MessageSquare, Monitor, UserCircle, BookOpen
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import Presentation from './Presentation';
+import TiltCard from '../components/TiltCard';
 
 interface UserProfile {
     id: string;
@@ -36,94 +37,113 @@ interface AdminProps {
 }
 
 const Admin: React.FC<AdminProps> = ({ onNavigate }) => {
-    const { isAdmin, user: currentUser } = useAuth();
+    // 1. Core Hooks (Fixed Order)
+    const auth = useAuth();
     const { theme } = useTheme();
-    const [users, setUsers] = useState<UserProfile[]>([]);
-    const [settings, setSettings] = useState<any[]>([]);
-    const [supportMessages, setSupportMessages] = useState<SupportMessage[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<'users' | 'settings' | 'briefing' | 'support'>('users');
-    const [searchQuery, setSearchQuery] = useState('');
-    const [stats, setStats] = useState({ totalUsers: 0, totalDocs: 0 });
     
-    // Password reset state
-    const [resettingUserId, setResettingUserId] = useState<string | null>(null);
-    const [newPassword, setNewPassword] = useState('');
-    const [showNewPassword, setShowNewPassword] = useState(false);
-    const [isResetting, setIsResetting] = useState(false);
-    const [toast, setToast] = useState<{ msg: string, type: 'success' | 'error' } | null>(null);
+    const [users, setUsers] = React.useState<UserProfile[]>([]);
+    const [settings, setSettings] = React.useState<any[]>([]);
+    const [supportMessages, setSupportMessages] = React.useState<SupportMessage[]>([]);
+    const [loading, setLoading] = React.useState(true);
+    const [activeTab, setActiveTab] = React.useState<'users' | 'settings' | 'briefing' | 'support' | 'summaries'>('users');
+    const [searchQuery, setSearchQuery] = React.useState('');
+    const [stats, setStats] = React.useState({ totalUsers: 0, totalDocs: 0 });
+    const [pendingSummaries, setPendingSummaries] = React.useState<any[]>([]);
+    
+    const [resettingUserId, setResettingUserId] = React.useState<string | null>(null);
+    const [newPassword, setNewPassword] = React.useState('');
+    const [isResetting, setIsResetting] = React.useState(false);
+    const [toast, setToast] = React.useState<{ msg: string, type: 'success' | 'error' } | null>(null);
 
-    useEffect(() => {
+    const isAdmin = auth?.isAdmin;
+    const currentUser = auth?.user;
+
+    // 2. Effects
+    React.useEffect(() => {
         if (isAdmin) {
-            fetchAdminData();
-            fetchSettings();
-            fetchSupportMessages();
+            loadInitialData();
+        } else if (auth && !auth.loading) {
+            setLoading(false);
         }
-    }, [isAdmin]);
+    }, [isAdmin, auth?.loading]);
+
+    const loadInitialData = async () => {
+        try {
+            setLoading(true);
+            await Promise.all([
+                fetchAdminData(),
+                fetchSettings(),
+                fetchSupportMessages(),
+                fetchPendingSummaries()
+            ]);
+        } catch (e) {
+            console.error("Initial load failed", e);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const fetchPendingSummaries = async () => {
+        if (!supabase) return;
+        try {
+            const { data: textSumms } = await supabase.from('user_summaries').select('*, profiles(username, email)').eq('status', 'pending');
+            // Safe query for documents
+            const { data: docSumms } = await supabase.from('documents').select('id, title, created_at, user_id, is_summary, summary_status').eq('is_summary', true).eq('summary_status', 'pending');
+            
+            // Map doc summaries with profile if available
+            const docSummsWithMeta = await Promise.all((docSumms || []).map(async (d) => {
+                const { data: p } = await supabase.from('profiles').select('username, email').eq('id', d.user_id).single();
+                return { ...d, profiles: p, type: 'document' };
+            }));
+
+            const combined = [
+                ...(textSumms || []).map(s => ({ ...s, type: 'text' })),
+                ...docSummsWithMeta
+            ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+            
+            setPendingSummaries(combined);
+        } catch (err) { console.error(err); }
+    };
+
+    const handleSummaryAction = async (id: string, action: 'approved' | 'rejected', type: 'text' | 'document' = 'text') => {
+        if (!supabase) return;
+        try {
+            const table = type === 'document' ? 'documents' : 'user_summaries';
+            const statusKey = type === 'document' ? 'summary_status' : 'status';
+            if (action === 'rejected') {
+                await supabase.from(table).delete().eq('id', id);
+                showToast(`Terminated.`);
+            } else {
+                await supabase.from(table).update({ [statusKey]: 'approved' }).eq('id', id);
+                showToast(`Approved.`);
+            }
+            fetchPendingSummaries();
+        } catch (err: any) { showToast(err.message, 'error'); }
+    };
 
     const fetchSettings = async () => {
-        try {
-            if (!supabase) return;
-            const { data, error } = await supabase.from('system_settings').select('*');
-            if (error) throw error;
-            setSettings(data || []);
-        } catch (err) {
-            console.error("Error fetching settings:", err);
-        }
+        if (!supabase) return;
+        const { data } = await supabase.from('system_settings').select('*');
+        if (data) setSettings(data);
     };
 
     const fetchSupportMessages = async () => {
-        try {
-            if (!supabase) return;
-            const { data, error } = await supabase
-                .from('support_messages')
-                .select('*')
-                .order('created_at', { ascending: false });
-            if (error) throw error;
-            setSupportMessages(data || []);
-        } catch (err) {
-            console.error("Support fetch error:", err);
-        }
+        if (!supabase) return;
+        const { data } = await supabase.from('support_messages').select('*').order('created_at', { ascending: false });
+        if (data) setSupportMessages(data);
     };
 
     const handleUpdateSupportStatus = async (id: string, status: string) => {
-        try {
-            if (!supabase) return;
-            const { error } = await supabase
-                .from('support_messages')
-                .update({ status })
-                .eq('id', id);
-            
-            if (error) throw error;
-            showToast(`Ticket ${status} successfully.`);
-            fetchSupportMessages();
-        } catch (err: any) {
-            showToast(`Update failed: ${err.message}`, 'error');
-        }
+        if (!supabase) return;
+        await supabase.from('support_messages').update({ status }).eq('id', id);
+        fetchSupportMessages();
     };
 
     const handleUpdateSetting = async (key: string, value: string) => {
-        try {
-            if (!supabase) return;
-            const { error } = await supabase
-                .from('system_settings')
-                .update({ value, updated_at: new Date().toISOString() })
-                .eq('key', key);
-            
-            if (error) throw error;
-            showToast(`${key} updated successfully.`);
-            
-            // Reload backend config
-            await fetch('/api/admin/reload-config', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ adminId: currentUser?.id })
-            });
-
-            fetchSettings();
-        } catch (err: any) {
-            showToast(`Update failed: ${err.message}`, 'error');
-        }
+        if (!supabase || !currentUser) return;
+        await supabase.from('system_settings').update({ value, updated_at: new Date().toISOString() }).eq('key', key);
+        showToast(`${key} updated.`);
+        fetchSettings();
     };
 
     const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
@@ -132,563 +152,262 @@ const Admin: React.FC<AdminProps> = ({ onNavigate }) => {
     };
 
     const fetchAdminData = async () => {
-        setLoading(true);
-        try {
-            if (!supabase) return;
-
-            // Fetch Users
-            const { data: profiles, error: pError } = await supabase
-                .from('profiles')
-                .select('*')
-                .order('stars_count', { ascending: false });
-            
-            if (pError) throw pError;
-            setUsers(profiles || []);
-
-            // Fetch Stats
-            const { count: userCount } = await supabase.from('profiles').select('*', { count: 'exact', head: true });
-            const { count: docCount } = await supabase.from('documents').select('*', { count: 'exact', head: true });
-            
-            setStats({
-                totalUsers: userCount || 0,
-                totalDocs: docCount || 0
-            });
-        } catch (err) {
-            console.error("Admin fetch error:", err);
-        } finally {
-            setLoading(false);
-        }
+        if (!supabase) return;
+        const { data: profiles } = await supabase.from('profiles').select('*').order('stars_count', { ascending: false });
+        if (profiles) setUsers(profiles);
+        const { count: userCount } = await supabase.from('profiles').select('*', { count: 'exact', head: true });
+        const { count: docCount } = await supabase.from('documents').select('*', { count: 'exact', head: true });
+        setStats({ totalUsers: userCount || 0, totalDocs: docCount || 0 });
     };
 
     const handleDeleteUser = async (targetId: string) => {
         if (!supabase) return;
-        if (!window.confirm("Are you sure you want to terminate this unit? All data will be erased.")) return;
-        
-        try {
-            const { error } = await supabase.rpc('admin_delete_user', { target_user_id: targetId });
-            if (error) throw error;
-            
-            setUsers(users.filter(u => u.id !== targetId));
-            showToast("Unit terminated from grid.");
-        } catch (err: any) {
-            showToast("Termination failed: " + err.message, 'error');
-        }
-    };
-
-    const handleAwardStar = async (targetId: string) => {
-        if (!supabase) return;
-        try {
-            const { error } = await supabase.rpc('increment_stars', { user_id: targetId });
-            if (error) throw error;
-            
-            setUsers(users.map(u => 
-                u.id === targetId ? { ...u, stars_count: u.stars_count + 1 } : u
-            ));
-        } catch (err: any) {
-            console.error("Star award failed:", err);
-        }
+        if (!window.confirm("Terminate unit?")) return;
+        await supabase.rpc('admin_delete_user', { target_user_id: targetId });
+        setUsers(users.filter(u => u.id !== targetId));
+        showToast("Terminated.");
     };
 
     const handleToggleAdmin = async (targetId: string, currentStatus: boolean) => {
-        if (!supabase || !currentUser) return;
-        if (targetId === currentUser.id) {
-            showToast("You cannot demote yourself.", 'error');
-            return;
-        }
-
-        const action = currentStatus ? "demote" : "promote";
-        if (!window.confirm(`Are you sure you want to ${action} this unit?`)) return;
-
+        if (!supabase) return;
+        const newStatus = !currentStatus;
+        if (!window.confirm(`Change administrative status to ${newStatus ? 'ADMIN' : 'USER'}?`)) return;
+        
         try {
             const { error } = await supabase.rpc('toggle_admin_status', { 
                 target_user_id: targetId, 
-                new_status: !currentStatus 
+                new_status: newStatus 
             });
             
             if (error) throw error;
             
-            setUsers(users.map(u => 
-                u.id === targetId ? { ...u, is_admin: !currentStatus } : u
-            ));
-            showToast(`Unit ${currentStatus ? 'demoted' : 'promoted'} successfully.`);
+            setUsers(users.map(u => u.id === targetId ? { ...u, is_admin: newStatus } : u));
+            showToast(`Status updated: ${newStatus ? 'Promoted to Admin' : 'Demoted to User'}`);
         } catch (err: any) {
-            showToast(`Operation failed: ${err.message}`, 'error');
+            showToast(err.message, 'error');
+        }
+    };
+
+    const handleAddStars = async (targetId: string, amount: number) => {
+        if (!supabase) return;
+        try {
+            const { error } = await supabase.rpc('increment_stars', { user_id: targetId, amount });
+            if (error) {
+                showToast(error.message, 'error');
+                return;
+            }
+            setUsers(users.map(u => u.id === targetId ? { ...u, stars_count: u.stars_count + amount } : u));
+            showToast(`Uplink: +${amount} Stardust awarded.`);
+        } catch (err: any) {
+            showToast(err.message, 'error');
         }
     };
 
     const handleResetPassword = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!resettingUserId || !newPassword || !currentUser) return;
-
         setIsResetting(true);
         try {
             const res = await fetch('/api/admin/reset-password', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    targetUserId: resettingUserId,
-                    newPassword,
-                    adminId: currentUser.id
-                })
+                body: JSON.stringify({ targetUserId: resettingUserId, newPassword, adminId: currentUser.id })
             });
-
-            // Check if response is JSON
-            const contentType = res.headers.get('content-type');
-            if (!contentType || !contentType.includes('application/json')) {
-                throw new Error("Backend server is not responding (Verify it is running on port 4000).");
-            }
-
             const data = await res.json();
-            if (res.ok && data.success) {
-                showToast("Password override successful.");
+            if (res.ok) {
+                showToast("Override successful.");
                 setResettingUserId(null);
                 setNewPassword('');
-            } else {
-                throw new Error(data.error || "Reset failed");
-            }
-        } catch (err: any) {
-            showToast(err.message, 'error');
-        } finally {
-            setIsResetting(false);
-        }
+            } else { throw new Error(data.error); }
+        } catch (err: any) { showToast(err.message, 'error'); }
+        finally { setIsResetting(false); }
     };
 
-    if (!isAdmin) {
+    // 3. Render Checks
+    if (auth.loading) {
         return (
-            <div className="min-h-screen flex items-center justify-center p-8 text-center">
-                <div className="max-w-md space-y-6">
-                    <ShieldAlert size={80} className="mx-auto text-red-500 animate-pulse" />
-                    <h1 className="text-4xl font-black uppercase tracking-tighter italic">Access Denied</h1>
-                    <p className="opacity-50 text-sm font-bold uppercase tracking-widest">Administrative clearance required to access this node.</p>
-                    <button 
-                        onClick={() => onNavigate('dashboard')}
-                        className="px-8 py-4 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-all font-black uppercase text-[10px] tracking-widest"
-                    >
-                        Return to Safety
-                    </button>
-                </div>
+            <div className="min-h-screen flex flex-col items-center justify-center gap-6 bg-[#050505] text-white">
+                <Loader className="animate-spin text-red-500" size={48} />
+                <p className="text-[10px] font-black uppercase tracking-[0.6em] animate-pulse">Establishing Command Link</p>
             </div>
         );
     }
 
-    const filteredUsers = users.filter(u => 
-        u.username?.toLowerCase().includes(searchQuery.toLowerCase()) || 
-        u.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (u.phone && u.phone.includes(searchQuery))
-    );
+    if (!isAdmin) {
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center gap-6 bg-[#050505] text-white p-10 text-center">
+                <ShieldAlert size={64} className="text-red-500" />
+                <h2 className="text-2xl font-black uppercase tracking-widest text-red-500">Access Restricted</h2>
+                <button onClick={() => onNavigate('dashboard')} className="px-8 py-4 bg-white/5 border border-white/10 rounded-2xl font-black uppercase text-[10px]">Return to Grid</button>
+            </div>
+        );
+    }
 
     return (
-        <div className={`min-h-screen relative z-10 pt-24 p-8 transition-colors duration-700 ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
-            <div className="max-w-6xl mx-auto">
-                {/* Toasts */}
+        <div className={`min-h-screen pt-12 pb-20 px-6 md:px-12 transition-all duration-1000 relative overflow-hidden ${theme === 'dark' ? 'bg-[#020202] text-white' : 'bg-slate-50 text-slate-900'}`}>
+            {/* Cyber Grid Background */}
+            <div className={`absolute inset-0 pointer-events-none opacity-20 ${theme === 'dark' ? 'block' : 'hidden'}`}>
+                <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+                    <defs>
+                        <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="1" />
+                        </pattern>
+                    </defs>
+                    <rect width="100%" height="100%" fill="url(#grid)" className="isometric-view scale-150 origin-center" />
+                </svg>
+            </div>
+
+            <div className="max-w-7xl mx-auto relative z-10">
                 <AnimatePresence>
                     {toast && (
-                        <motion.div 
-                            initial={{ opacity: 0, y: -100, x: '-50%' }}
-                            animate={{ opacity: 1, y: 20, x: '-50%' }}
-                            exit={{ opacity: 0, y: -100, x: '-50%' }}
-                            className={`fixed top-20 left-1/2 z-[2000] px-8 py-4 rounded-full font-black uppercase text-[10px] tracking-widest shadow-2xl flex items-center gap-3 ${
-                                toast.type === 'error' ? 'bg-red-500 text-white' : 'bg-green-500 text-white'
-                            }`}
-                        >
-                            {toast.type === 'error' ? <ShieldAlert size={16} /> : <CheckCircle2 size={16} />} 
-                            {toast.msg}
+                        <motion.div initial={{ opacity: 0, y: -100, x: '-50%' }} animate={{ opacity: 1, y: 20, x: '-50%' }} exit={{ opacity: 0, y: -100, x: '-50%' }} className={`fixed top-24 left-1/2 z-[1000] px-8 py-4 rounded-full font-black uppercase text-[10px] tracking-widest shadow-2xl flex items-center gap-3 ${toast.type === 'error' ? 'bg-red-500 text-white' : 'bg-emerald-500 text-white'}`}>
+                            {toast.type === 'error' ? <ShieldAlert size={16} /> : <CheckCircle2 size={16} />} {toast.msg}
                         </motion.div>
                     )}
                 </AnimatePresence>
 
-                {/* Password Reset Modal */}
-                <AnimatePresence>
-                    {resettingUserId && (
-                        <div className="fixed inset-0 z-[1500] flex items-center justify-center p-6 backdrop-blur-md bg-black/60">
-                            <motion.div 
-                                initial={{ scale: 0.9, opacity: 0 }}
-                                animate={{ scale: 1, opacity: 1 }}
-                                className={`w-full max-w-md p-10 rounded-[3rem] border shadow-2xl ${
-                                    theme === 'dark' ? 'bg-[#0D0D0D] border-white/10' : 'bg-white border-slate-200'
-                                }`}
-                            >
-                                <div className="flex justify-between items-center mb-8">
-                                    <h2 className="text-2xl font-black italic uppercase tracking-tighter">Override Key</h2>
-                                    <button onClick={() => setResettingUserId(null)} className="opacity-40 hover:opacity-100 transition-opacity"><X /></button>
-                                </div>
-                                <form onSubmit={handleResetPassword} className="space-y-6">
-                                    <div className="space-y-2">
-                                        <label className="text-[9px] font-black uppercase tracking-widest opacity-30 ml-4">New Secure Password</label>
-                                        <div className="relative">
-                                            <input 
-                                                type={showNewPassword ? "text" : "password"}
-                                                value={newPassword}
-                                                onChange={(e) => setNewPassword(e.target.value)}
-                                                required
-                                                className={`w-full p-5 pr-14 rounded-2xl border outline-none font-bold ${
-                                                    theme === 'dark' ? 'bg-white/5 border-white/10 focus:border-red-500' : 'bg-slate-50 border-slate-200'
-                                                }`}
-                                                placeholder="••••••••"
-                                            />
-                                            <button 
-                                                type="button"
-                                                onClick={() => setShowNewPassword(!showNewPassword)}
-                                                className="absolute right-5 top-1/2 -translate-y-1/2 opacity-40 hover:opacity-100 transition-opacity"
-                                            >
-                                                {showNewPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <button 
-                                        type="submit"
-                                        disabled={isResetting}
-                                        className="w-full py-5 bg-red-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-red-500 transition-all flex items-center justify-center gap-3"
-                                    >
-                                        {isResetting ? <Loader className="animate-spin" size={16} /> : <Key size={16} />}
-                                        Execute Reset
-                                    </button>
-                                </form>
-                            </motion.div>
-                        </div>
-                    )}
-                </AnimatePresence>
-
-                <header className="mb-16 flex flex-col md:flex-row justify-between items-start md:items-end gap-8">
-                    <div className="space-y-4">
-                        <div className="flex items-center gap-4">
-                            <div className={`p-3 rounded-2xl border shadow-lg ${theme === 'dark' ? 'bg-red-600/10 text-red-500 border-red-500/20' : 'bg-red-50 text-red-600 border-red-100'}`}>
-                                <Shield size={32} />
-                            </div>
-                            <h1 className="text-6xl md:text-7xl font-black italic uppercase tracking-tighter leading-none">Command Center</h1>
-                        </div>
-                        <p className="opacity-40 font-black uppercase tracking-[0.4em] text-[10px] ml-20">System Administration & Oversight</p>
+                <header className="mb-12 flex flex-col md:flex-row justify-between items-center gap-8">
+                    <div className="flex items-center gap-4">
+                        <div className="w-16 h-16 bg-red-600 rounded-[1.5rem] flex items-center justify-center shadow-2xl rotate-3"><Shield className="text-white -rotate-3" size={32} /></div>
+                        <div><h1 className="text-5xl font-black italic uppercase tracking-tighter leading-none">Command Center</h1><p className="opacity-40 font-black uppercase tracking-[0.5em] text-[9px] mt-2">Oversight Interface</p></div>
                     </div>
-                    <div className="flex gap-4">
-                        <motion.button 
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            onClick={fetchAdminData}
-                            className={`p-5 border rounded-3xl transition-all shadow-xl ${theme === 'dark' ? 'bg-white/5 border-white/10 hover:bg-white/10' : 'bg-slate-100 border-slate-200 hover:bg-slate-200'}`}
-                        >
-                            <Activity size={24} />
-                        </motion.button>
-                        <motion.button 
-                            whileHover={{ scale: 1.05, x: -5 }}
-                            whileTap={{ scale: 0.95 }}
-                            onClick={() => onNavigate('dashboard')}
-                            className={`p-5 border rounded-3xl transition-all shadow-xl ${theme === 'dark' ? 'bg-white/5 border-white/10 hover:bg-white/10 text-white' : 'bg-slate-100 border-slate-200 hover:bg-slate-200 text-slate-900'}`}
-                        >
-                            <ArrowLeft size={24} />
-                        </motion.button>
-                    </div>
+                    <button onClick={() => onNavigate('dashboard')} className={`p-5 border rounded-3xl transition-all ${theme === 'dark' ? 'bg-white/5 border-white/10 hover:bg-white/10 text-white' : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-900'}`}><ArrowLeft size={24} /></button>
                 </header>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
-                    <div className={`p-8 rounded-[3rem] border ${theme === 'dark' ? 'bg-[#0D0D0D] border-white/5' : 'bg-white border-slate-100 shadow-xl'}`}>
-                        <div className="flex items-center gap-4 mb-4">
-                            <Users className="text-blue-500" size={20} />
-                            <span className="text-[10px] font-black uppercase tracking-widest opacity-40">Total Active Units</span>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+                    {[
+                        { label: 'Units', val: stats.totalUsers, icon: Users, color: 'blue' },
+                        { label: 'Fragments', val: stats.totalDocs, icon: FileText, color: 'purple' },
+                        { label: 'Alerts', val: pendingSummaries.length, icon: Activity, color: 'red' },
+                        { label: 'Support', val: supportMessages.filter(m => m.status === 'pending').length, icon: MessageSquare, color: 'amber' }
+                    ].map((s, i) => (
+                        <div key={i} className={`p-8 rounded-[3rem] border ${theme === 'dark' ? 'bg-[#0D0D0D] border-white/5' : 'bg-white border-slate-100 shadow-xl'}`}>
+                            <div className="flex items-center gap-4 mb-4"><s.icon className={`text-${s.color}-500`} size={20} /><span className="text-[10px] font-black uppercase tracking-widest opacity-40">{s.label}</span></div>
+                            <div className="text-4xl font-black italic tracking-tighter">{s.val}</div>
                         </div>
-                        <div className="text-5xl font-black italic tracking-tighter">{stats.totalUsers}</div>
-                    </div>
-                    <div className={`p-8 rounded-[3rem] border ${theme === 'dark' ? 'bg-[#0D0D0D] border-white/5' : 'bg-white border-slate-100 shadow-xl'}`}>
-                        <div className="flex items-center gap-4 mb-4">
-                            <FileText className="text-purple-500" size={20} />
-                            <span className="text-[10px] font-black uppercase tracking-widest opacity-40">Intelligence Fragments</span>
-                        </div>
-                        <div className="text-5xl font-black italic tracking-tighter">{stats.totalDocs}</div>
-                    </div>
+                    ))}
                 </div>
 
-                {/* Tabs */}
-                <div className="flex gap-4 mb-8">
-                    <button 
-                        onClick={() => setActiveTab('users')}
-                        className={`px-8 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all ${
-                            activeTab === 'users' 
-                            ? 'bg-red-600 text-white' 
-                            : theme === 'dark' ? 'bg-white/5 text-white/40 hover:bg-white/10' : 'bg-slate-100 text-slate-500'
-                        }`}
-                    >
-                        User Management
-                    </button>
-                    <button 
-                        onClick={() => setActiveTab('settings')}
-                        className={`px-8 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all ${
-                            activeTab === 'settings' 
-                            ? 'bg-blue-600 text-white' 
-                            : theme === 'dark' ? 'bg-white/5 text-white/40 hover:bg-white/10' : 'bg-slate-100 text-slate-500'
-                        }`}
-                    >
-                        System Settings
-                    </button>
-                    <button 
-                        onClick={() => setActiveTab('briefing')}
-                        className={`px-8 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all ${
-                            activeTab === 'briefing' 
-                            ? 'bg-indigo-600 text-white' 
-                            : theme === 'dark' ? 'bg-white/5 text-white/40 hover:bg-white/10' : 'bg-slate-100 text-slate-500'
-                        }`}
-                    >
-                        System Briefing
-                    </button>
-                    <button 
-                        onClick={() => setActiveTab('support')}
-                        className={`px-8 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all ${
-                            activeTab === 'support' 
-                            ? 'bg-amber-600 text-white' 
-                            : theme === 'dark' ? 'bg-white/5 text-white/40 hover:bg-white/10' : 'bg-slate-100 text-slate-500'
-                        }`}
-                    >
-                        Support Inbox
-                    </button>
+                <div className="flex flex-wrap gap-3 mb-12 bg-white/5 border border-white/5 p-2 rounded-[2.5rem] backdrop-blur-xl">
+                    {[{id:'users',l:'Units',i:Users},{id:'summaries',l:'Summaries',i:FileText,b:pendingSummaries.length},{id:'support',l:'Support',i:MessageSquare},{id:'settings',l:'Params',i:Key},{id:'briefing',l:'Brief',i:Monitor}].map(t => (
+                        <button key={t.id} onClick={() => setActiveTab(t.id as any)} className={`px-8 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all flex items-center gap-3 relative ${activeTab === t.id ? 'bg-red-600 text-white shadow-2xl' : 'text-gray-500 hover:text-white hover:bg-white/5'}`}>
+                            <t.i size={16} />{t.l}{t.b ? <span className="absolute -top-2 -right-2 w-5 h-5 bg-white text-red-600 rounded-full flex items-center justify-center text-[8px] font-black">{t.b}</span> : null}
+                        </button>
+                    ))}
                 </div>
 
                 <AnimatePresence mode="wait">
-                    {activeTab === 'users' ? (
-                        <motion.div 
-                            key="users"
-                            initial={{ opacity: 0, x: -20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: 20 }}
-                        >
-                            <div className="relative mb-8">
-                                <Search className="absolute left-6 top-1/2 -translate-y-1/2 opacity-30" size={20} />
-                                <input 
-                                    type="text"
-                                    placeholder="Search system units (Alias, Email, or Phone)..."
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                    className={`w-full py-6 pl-16 pr-8 rounded-[2rem] border outline-none font-bold transition-all ${
-                                        theme === 'dark' 
-                                        ? 'bg-[#0D0D0D] border-white/10 focus:border-red-500' 
-                                        : 'bg-white border-slate-200 focus:border-red-600'
-                                    }`}
-                                />
-                            </div>
-
-                            {loading ? (
-                                <div className="flex justify-center py-20">
-                                    <Loader className="animate-spin text-red-500" size={48} />
-                                </div>
-                            ) : (
-                                <div className="space-y-4">
-                                    <AnimatePresence>
-                                        {filteredUsers.map((u) => (
-                                            <motion.div 
-                                                key={u.id}
-                                                layout
-                                                initial={{ opacity: 0, scale: 0.95 }}
-                                                animate={{ opacity: 1, scale: 1 }}
-                                                exit={{ opacity: 0, scale: 0.95 }}
-                                                className={`p-8 rounded-[3rem] border flex flex-col md:flex-row items-center gap-8 transition-all relative overflow-hidden ${
-                                                    u.is_admin ? 'border-red-500/30 bg-red-500/5' : theme === 'dark' ? 'bg-[#0D0D0D] border-white/5' : 'bg-white border-slate-100 shadow-sm'
-                                                }`}
-                                            >
-                                                {/* Profile Photo */}
-                                                <div className="relative shrink-0">
-                                                    {u.avatar_url ? (
-                                                        <div className="w-20 h-20 rounded-[2rem] border-2 border-blue-500/20 overflow-hidden shadow-xl">
-                                                            <img src={u.avatar_url} alt={u.username} className="w-full h-full object-cover" />
-                                                        </div>
-                                                    ) : (
-                                                        <div className={`w-20 h-20 rounded-[2rem] border-2 border-dashed flex items-center justify-center ${
-                                                            theme === 'dark' ? 'bg-white/5 border-white/10 text-white/20' : 'bg-slate-50 border-slate-200 text-slate-300'
-                                                        }`}>
-                                                            <UserCircle size={40} />
-                                                        </div>
-                                                    )}
-                                                    {u.is_admin && (
-                                                        <div className="absolute -top-2 -right-2 bg-red-500 text-white p-1.5 rounded-xl shadow-lg border-4 border-[#050505]">
-                                                            <Shield size={12} />
-                                                        </div>
-                                                    )}
-                                                </div>
-
-                                                <div className="flex-1 space-y-2 text-center md:text-left">
-                                                    <div className="flex items-center gap-3">
-                                                        <h3 className="text-2xl font-black italic uppercase tracking-tight">{u.username || 'Anonymous'}</h3>
-                                                        {u.is_admin && <span className="px-3 py-1 bg-red-500 text-white rounded-full text-[8px] font-black uppercase tracking-widest">Admin</span>}
-                                                        {u.id === currentUser?.id && <span className="px-3 py-1 bg-blue-500 text-white rounded-full text-[8px] font-black uppercase tracking-widest">You</span>}
-                                                        {u.has_downloaded_desktop && (
-                                                            <span className="px-3 py-1 bg-blue-600/20 text-blue-500 border border-blue-500/30 rounded-full text-[8px] font-black uppercase tracking-widest flex items-center gap-1">
-                                                                <Monitor size={10} /> Desktop Uplink
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    <div className="flex flex-wrap gap-4">
-                                                        <p className="text-xs font-bold opacity-40 flex items-center gap-2"><Shield className="w-3 h-3" /> {u.email}</p>
-                                                        {u.phone && <p className="text-xs font-bold opacity-40 flex items-center gap-2 text-indigo-500"><Phone className="w-3 h-3" /> {u.phone}</p>}
-                                                    </div>
-                                                </div>
-
-                                                <div className="flex items-center gap-10">
-                                                    <div className="text-right">
-                                                        <div className="text-3xl font-black italic tracking-tighter text-amber-500 flex items-center gap-2">
-                                                            {u.stars_count} <Star className="fill-amber-500" size={20} />
-                                                        </div>
-                                                        <p className="text-[8px] font-black uppercase opacity-30 tracking-widest">Neural Stars</p>
-                                                    </div>
-
-                                                    <div className="flex items-center gap-2">
-                                                        <button 
-                                                            onClick={() => handleToggleAdmin(u.id, u.is_admin)}
-                                                            className={`p-4 rounded-2xl transition-all ${
-                                                                u.is_admin 
-                                                                ? 'bg-red-600/10 text-red-600 hover:bg-red-600 hover:text-white' 
-                                                                : 'bg-green-600/10 text-green-600 hover:bg-green-600 hover:text-white'
-                                                            }`}
-                                                            title={u.is_admin ? "Demote from Admin" : "Promote to Admin"}
-                                                        >
-                                                            <Shield size={20} className={u.is_admin ? "fill-red-600" : ""} />
-                                                        </button>
-                                                        <button 
-                                                            onClick={() => setResettingUserId(u.id)}
-                                                            className="p-4 bg-indigo-500/10 text-indigo-500 rounded-2xl hover:bg-indigo-500 hover:text-white transition-all"
-                                                            title="Override Password"
-                                                        >
-                                                            <Key size={20} />
-                                                        </button>
-                                                        <button 
-                                                            onClick={() => handleAwardStar(u.id)}
-                                                            className="p-4 bg-amber-500/10 text-amber-500 rounded-2xl hover:bg-amber-500 hover:text-white transition-all"
-                                                            title="Award Star"
-                                                        >
-                                                            <Star size={20} />
-                                                        </button>
-                                                        <button 
-                                                            disabled={u.is_admin}
-                                                            onClick={() => handleDeleteUser(u.id)}
-                                                            className={`p-4 rounded-2xl transition-all ${
-                                                                u.is_admin 
-                                                                ? 'bg-gray-500/10 text-gray-500 cursor-not-allowed opacity-20' 
-                                                                : 'bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white'
-                                                            }`}
-                                                            title="Terminate Unit"
-                                                        >
-                                                            <Trash2 size={20} />
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            </motion.div>
-                                        ))}
-                                    </AnimatePresence>
-                                </div>
-                            )}
-                        </motion.div>
-                    ) : activeTab === 'settings' ? (
-                        <motion.div 
-                            key="settings"
-                            initial={{ opacity: 0, x: 20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: -20 }}
-                            className="space-y-6"
-                        >
-                            <div className={`p-8 rounded-[3rem] border ${theme === 'dark' ? 'bg-[#0D0D0D] border-white/5' : 'bg-white border-slate-100 shadow-xl'}`}>
-                                <h2 className="text-2xl font-black italic uppercase tracking-tighter mb-8 flex items-center gap-3">
-                                    <Key className="text-blue-500" /> API & Database Configuration
-                                </h2>
-                                <div className="space-y-8">
-                                    {settings.map((setting) => (
-                                        <div key={setting.key} className="space-y-3">
-                                            <div className="flex justify-between items-end px-4">
-                                                <div>
-                                                    <span className="text-[10px] font-black uppercase tracking-widest text-blue-500">{setting.key}</span>
-                                                    <p className="text-[9px] opacity-40 font-bold uppercase tracking-widest">{setting.description}</p>
-                                                </div>
-                                                <span className="text-[8px] opacity-20 font-bold uppercase">Last Updated: {new Date(setting.updated_at).toLocaleString()}</span>
+                    {activeTab === 'users' && (
+                        <motion.div key="users" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="space-y-8">
+                            <div className="relative"><Search className="absolute left-6 top-1/2 -translate-y-1/2 text-gray-500" size={20} /><input placeholder="Search units..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className={`w-full py-7 pl-16 pr-8 rounded-[2.5rem] border outline-none font-black text-sm uppercase tracking-widest transition-all ${theme === 'dark' ? 'bg-[#0D0D0D] border-white/5 focus:border-red-500 shadow-2xl' : 'bg-white border-slate-200'}`} /></div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {users.filter(u => u.email.toLowerCase().includes(searchQuery.toLowerCase())).map(u => (
+                                    <TiltCard key={u.id} className="p-8 rounded-[3.5rem] bg-white/5 border border-white/5 hover:border-red-500/30 transition-all relative">
+                                        {u.is_admin && (
+                                            <div className="absolute top-6 right-6 p-2 bg-red-600/20 border border-red-500/30 rounded-xl text-red-500" title="Admin Unit">
+                                                <Shield size={14} />
                                             </div>
-                                            <div className="flex gap-4">
-                                                <input 
-                                                    type="password"
-                                                    defaultValue={setting.value}
-                                                    onBlur={(e) => {
-                                                        if (e.target.value !== setting.value) {
-                                                            handleUpdateSetting(setting.key, e.target.value);
-                                                        }
-                                                    }}
-                                                    className={`flex-1 p-5 rounded-2xl border outline-none font-bold transition-all ${
-                                                        theme === 'dark' ? 'bg-white/5 border-white/10 focus:border-blue-500' : 'bg-slate-50 border-slate-200 focus:border-blue-600'
-                                                    }`}
-                                                    placeholder={`Enter ${setting.key}...`}
-                                                />
+                                        )}
+                                        <div className="flex items-center gap-4 mb-8"><div className="w-16 h-16 rounded-2xl bg-red-600/10 border border-red-500/20 flex items-center justify-center text-red-500 overflow-hidden">{u.avatar_url ? <img src={u.avatar_url} className="w-full h-full object-cover" /> : <UserCircle size={32} />}</div><div className="min-w-0"><h3 className="text-xl font-black italic truncate">{u.username || 'Unit'}</h3><p className="text-[10px] font-bold opacity-30 truncate">{u.email}</p></div></div>
+                                        <div className="space-y-3 mb-8">
+                                            <div className="flex justify-between items-center text-[9px] font-black uppercase tracking-widest opacity-40">
+                                                <span>Stars</span>
+                                                <span className="text-amber-500">{u.stars_count}</span>
+                                            </div>
+                                            <div className="grid grid-cols-3 gap-2">
+                                                <button onClick={() => handleAddStars(u.id, 10)} className="py-2 bg-amber-500/10 text-amber-500 rounded-lg text-[8px] font-black hover:bg-amber-500 hover:text-white transition-all">+10</button>
+                                                <button onClick={() => handleAddStars(u.id, 50)} className="py-2 bg-amber-500/10 text-amber-500 rounded-lg text-[8px] font-black hover:bg-amber-500 hover:text-white transition-all">+50</button>
+                                                <button onClick={() => {
+                                                    const val = prompt("Enter amount:");
+                                                    if(val) handleAddStars(u.id, parseInt(val));
+                                                }} className="py-2 bg-amber-500/10 text-amber-500 rounded-lg text-[8px] font-black hover:bg-amber-500 hover:text-white transition-all">...</button>
                                             </div>
                                         </div>
-                                    ))}
-                                </div>
-                                <div className="mt-12 p-6 rounded-2xl bg-amber-500/10 border border-amber-500/20">
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-amber-500 flex items-center gap-2">
-                                        <ShieldAlert size={14} /> Critical Warning
-                                    </p>
-                                    <p className="text-[11px] font-bold mt-2 opacity-60">Changes to API keys or database strings will take effect immediately. Ensure values are correct to prevent system failure.</p>
-                                </div>
+
+                                        <div className="grid grid-cols-3 gap-3">
+                                            <button onClick={() => {setResettingUserId(u.id); setNewPassword('');}} className="py-4 bg-blue-500/10 text-blue-500 rounded-2xl font-black uppercase text-[9px] hover:bg-blue-500 hover:text-white transition-all">Key Reset</button>
+                                            
+                                            {/* Only Ali can toggle admin status */}
+                                            {currentUser?.email === 'aliopooopp3@gmail.com' ? (
+                                                <button onClick={() => handleToggleAdmin(u.id, u.is_admin)} className={`py-4 rounded-2xl font-black uppercase text-[9px] transition-all ${u.is_admin ? 'bg-amber-500/10 text-amber-500 hover:bg-amber-500 hover:text-white' : 'bg-purple-500/10 text-purple-500 hover:bg-purple-500 hover:text-white'}`}>
+                                                    {u.is_admin ? 'Demote' : 'Promote'}
+                                                </button>
+                                            ) : (
+                                                <div className="py-4 bg-white/5 rounded-2xl flex items-center justify-center opacity-20" title="Restricted to Super-Admin">
+                                                    <Shield size={14} />
+                                                </div>
+                                            )}
+                                            
+                                            <button onClick={() => handleDeleteUser(u.id)} className="py-4 bg-red-500/10 text-red-500 rounded-2xl font-black uppercase text-[9px] hover:bg-red-500 hover:text-white transition-all">Terminate</button>
+                                        </div>
+                                    </TiltCard>
+                                ))}
                             </div>
                         </motion.div>
-                    ) : activeTab === 'briefing' ? (
-                        <motion.div
-                            key="briefing"
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -20 }}
-                        >
-                            <Presentation />
-                        </motion.div>
-                    ) : (
-                        <motion.div 
-                            key="support"
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -20 }}
-                            className="space-y-6"
-                        >
-                            {supportMessages.length === 0 ? (
-                                <div className={`p-20 text-center rounded-[3rem] border border-dashed ${theme === 'dark' ? 'border-white/10 bg-white/5' : 'border-slate-200'}`}>
-                                    <MessageSquare size={48} className="mx-auto mb-4 opacity-20" />
-                                    <p className="font-black uppercase tracking-[0.4em] opacity-30">No pending transmissions</p>
-                                </div>
-                            ) : (
-                                <div className="grid grid-cols-1 gap-6">
-                                    {supportMessages.map((msg) => (
-                                        <motion.div 
-                                            key={msg.id}
-                                            className={`p-8 rounded-[3rem] border transition-all ${
-                                                msg.status === 'pending' 
-                                                ? 'border-amber-500/30 bg-amber-500/5' 
-                                                : theme === 'dark' ? 'bg-[#0D0D0D] border-white/5' : 'bg-white border-slate-100 shadow-sm'
-                                            }`}
-                                        >
-                                            <div className="flex justify-between items-start mb-6">
-                                                <div className="flex items-center gap-4">
-                                                    <div className={`p-4 rounded-2xl ${msg.status === 'pending' ? 'bg-amber-500 text-white' : 'bg-blue-600/10 text-blue-500'}`}>
-                                                        <Mail size={20} />
-                                                    </div>
-                                                    <div>
-                                                        <h4 className="text-xl font-black italic uppercase tracking-tight">{msg.subject}</h4>
-                                                        <p className="text-xs font-bold opacity-40 uppercase tracking-widest">{msg.email}</p>
-                                                    </div>
-                                                </div>
-                                                <div className="flex gap-2">
-                                                    <button 
-                                                        onClick={() => handleUpdateSupportStatus(msg.id, msg.status === 'resolved' ? 'pending' : 'resolved')}
-                                                        className={`px-4 py-2 rounded-xl text-[8px] font-black uppercase tracking-widest transition-all ${
-                                                            msg.status === 'resolved' ? 'bg-green-500 text-white' : 'bg-white/5 border border-white/10 hover:bg-white/10'
-                                                        }`}
-                                                    >
-                                                        {msg.status === 'resolved' ? 'Resolved' : 'Mark Resolved'}
-                                                    </button>
-                                                </div>
-                                            </div>
-                                            <p className={`p-6 rounded-2xl text-sm leading-relaxed font-medium ${theme === 'dark' ? 'bg-black/40' : 'bg-slate-50'}`}>
-                                                {msg.message}
-                                            </p>
-                                            <div className="mt-6 flex justify-between items-center text-[8px] font-black uppercase tracking-[0.3em] opacity-20">
-                                                <span>Protocol ID: {msg.id.slice(0,8)}</span>
-                                                <span>Timestamp: {new Date(msg.created_at).toLocaleString()}</span>
-                                            </div>
-                                        </motion.div>
-                                    ))}
-                                </div>
+                    )}
+                    {activeTab === 'summaries' && (
+                        <motion.div key="summaries" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="space-y-8">
+                            {pendingSummaries.length === 0 ? <div className="py-40 text-center opacity-20 uppercase font-black tracking-widest text-[10px]">No pending fragments</div> : (
+                                <div className="grid grid-cols-1 gap-6">{pendingSummaries.map(s => (
+                                    <div key={s.id} className="p-10 rounded-[4rem] bg-white/5 border border-white/5 flex flex-col lg:flex-row gap-10 items-center">
+                                        <div className="flex-1 space-y-4">
+                                            <div className="flex items-center gap-4"><span className="px-4 py-1 bg-purple-600/20 text-purple-500 border border-purple-500/20 rounded-full text-[8px] font-black uppercase">{s.type === 'document' ? 'File' : 'Text'}</span><span className="text-[9px] font-black opacity-30">Author: {s.profiles?.username || 'Unit'}</span></div>
+                                            <h3 className="text-2xl font-black italic uppercase text-white">{s.title}</h3>
+                                            {s.type === 'text' ? <p className="text-sm font-bold opacity-50 italic line-clamp-2">"{s.content}"</p> : <div className="text-blue-400 font-black text-[10px] uppercase">Attachment Indexed</div>}
+                                        </div>
+                                        <div className="flex gap-4 w-full lg:w-auto">
+                                            <button 
+                                                onClick={() => onNavigate('reader', s.id)}
+                                                className="flex-1 lg:flex-none px-6 py-5 bg-white/5 border border-white/10 text-white rounded-[2rem] font-black uppercase tracking-widest text-[9px] hover:bg-white/10 transition-all flex items-center gap-2"
+                                            >
+                                                <BookOpen size={14} /> Review
+                                            </button>
+                                            <button onClick={() => handleSummaryAction(s.id, 'approved', s.type)} className="flex-1 px-10 py-5 bg-emerald-600 text-white rounded-[2rem] font-black uppercase text-[9px]">Accept</button>
+                                            <button onClick={() => handleSummaryAction(s.id, 'rejected', s.type)} className="flex-1 px-10 py-5 bg-red-600/10 text-red-500 border border-red-500/20 rounded-[2rem] font-black uppercase text-[9px]">Terminate</button>
+                                        </div>
+                                    </div>
+                                ))}</div>
                             )}
                         </motion.div>
                     )}
+                    {activeTab === 'settings' && (
+                        <motion.div key="settings" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-6">
+                            <div className="p-12 rounded-[4rem] border bg-white/5 border-white/5"><h2 className="text-3xl font-black italic uppercase mb-12 flex items-center gap-4"><Key className="text-blue-500" size={32} />Parameters</h2><div className="space-y-10">{settings.map(s => (
+                                <div key={s.key} className="space-y-4">
+                                    <div className="flex justify-between px-4"><span className="text-[11px] font-black text-blue-500 uppercase">{s.key}</span><span className="text-[8px] opacity-20 font-black uppercase">v1.4</span></div>
+                                    <input type="password" defaultValue={s.value} onBlur={e => e.target.value !== s.value && handleUpdateSetting(s.key, e.target.value)} className="w-full p-6 rounded-3xl border bg-white/5 border-white/10 outline-none font-bold" />
+                                </div>
+                            ))}</div></div>
+                        </motion.div>
+                    )}
+                    {activeTab === 'support' && (
+                        <motion.div key="support" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-6">
+                            {supportMessages.length === 0 ? <div className="py-40 text-center opacity-20 font-black uppercase text-[10px]">Support Grid Clear</div> : (
+                                <div className="grid grid-cols-1 gap-6">{supportMessages.map(m => (
+                                    <div key={m.id} className={`p-10 rounded-[4rem] border ${m.status === 'pending' ? 'bg-amber-500/5 border-amber-500/20' : 'bg-white/5 border-white/5'}`}>
+                                        <div className="flex justify-between items-start mb-8"><div className="flex items-center gap-6"><div className={`p-5 rounded-2xl ${m.status === 'pending' ? 'bg-amber-500 text-white shadow-xl shadow-amber-500/20' : 'bg-blue-600/10 text-blue-500'}`}><Mail size={24} /></div><div><h4 className="text-2xl font-black italic uppercase tracking-tight">{m.subject}</h4><p className="text-[10px] font-bold opacity-40 uppercase tracking-widest mt-1">{m.email}</p></div></div><button onClick={() => handleUpdateSupportStatus(m.id, m.status === 'resolved' ? 'pending' : 'resolved')} className={`px-6 py-3 rounded-xl text-[9px] font-black uppercase transition-all ${m.status === 'resolved' ? 'bg-emerald-500 text-white' : 'bg-white/5 border border-white/10'}`}>{m.status === 'resolved' ? 'Resolved' : 'Mark Resolved'}</button></div>
+                                        <p className="p-8 rounded-[2.5rem] text-sm leading-relaxed font-bold italic bg-black/40">"{m.message}"</p>
+                                    </div>
+                                ))}</div>
+                            )}
+                        </motion.div>
+                    )}
+                    {activeTab === 'briefing' && (
+                        <motion.div key="briefing" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}><Presentation /></motion.div>
+                    )}
                 </AnimatePresence>
             </div>
+
+            <AnimatePresence>{resettingUserId && (
+                <div className="fixed inset-0 z-[2000] bg-black/90 backdrop-blur-xl flex items-center justify-center p-6">
+                    <form onSubmit={handleResetPassword} className="max-w-md w-full bg-[#0D0D0D] border border-white/10 p-12 rounded-[4rem] text-center">
+                        <div className="w-20 h-20 bg-blue-600 rounded-[2rem] flex items-center justify-center mx-auto mb-8"><Key size={36} className="text-white" /></div>
+                        <h2 className="text-3xl font-black italic uppercase mb-10">Key Override</h2>
+                        <input type="text" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="New Secure Key..." className="w-full p-6 bg-white/5 border border-white/5 rounded-2xl outline-none focus:border-blue-500 font-black text-center uppercase mb-10" />
+                        <div className="flex gap-4"><button type="button" onClick={() => setResettingUserId(null)} className="flex-1 py-5 bg-white/5 rounded-2xl font-black uppercase text-[10px]">Cancel</button><button disabled={isResetting || !newPassword} className="flex-1 py-5 bg-blue-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl">{isResetting ? 'Processing...' : 'Override'}</button></div>
+                    </form>
+                </div>
+            )}</AnimatePresence>
         </div>
     );
 };

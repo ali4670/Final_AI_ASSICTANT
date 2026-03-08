@@ -62,8 +62,7 @@ const StudyPath: React.FC<StudyPathProps> = ({ onNavigate }) => {
         };
 
         try {
-            const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:4000';
-            const response = await fetch(`${baseUrl}/api/save-study`, {
+            const response = await fetch(`/api/save-study`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload),
@@ -218,7 +217,7 @@ const StudyPath: React.FC<StudyPathProps> = ({ onNavigate }) => {
                 <Zap className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-blue-500" size={48} />
             </div>
             <h2 className="text-4xl font-black italic uppercase tracking-tighter mb-4 animate-pulse">Neural Synthesis</h2>
-            <p className="opacity-40 font-black uppercase text-[10px] tracking-[0.6em]">Populating {profile.system} Academic Journal...</p>
+            <p className="opacity-40 font-black uppercase text-[10px] tracking-[0.6em]">Populating {profile.system} Academic Profile...</p>
         </div>
     );
 
@@ -258,13 +257,13 @@ const StudyPath: React.FC<StudyPathProps> = ({ onNavigate }) => {
                 onClick={() => onNavigate('studyTimeline')} 
                 className="w-full py-8 bg-gradient-to-r from-blue-600 to-indigo-700 rounded-[3rem] font-black uppercase tracking-[0.4em] text-sm hover:shadow-[0_0_50px_rgba(59,130,246,0.3)] transition-all active:scale-95 group"
             >
-                Launch Neural Journal <ChevronRight className="inline ml-2 group-hover:translate-x-2 transition-transform" />
+                Launch Neural Roadmap <ChevronRight className="inline ml-2 group-hover:translate-x-2 transition-transform" />
             </button>
         </motion.div>
     );
 
     return (
-        <div className={`min-h-screen flex items-center justify-center px-6 transition-colors duration-700 ${theme === 'dark' ? 'bg-[#050505] text-white' : 'bg-[#F8FAFC] text-slate-900'} pt-20 pb-20`}>
+        <div className={`min-h-screen flex items-center justify-center px-6 transition-colors duration-700 ${theme === 'dark' ? 'bg-[#050505] text-white' : 'bg-[#F8FAFC] text-slate-900'} pt-12 pb-20`}>
             <div className="max-w-3xl w-full">
                 {!isGenerating && step < 4 && <ProgressBar />}
                 {isGenerating ? renderGenerating() : (

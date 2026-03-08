@@ -1,40 +1,51 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { BookOpen, LogOut, Sun, Moon, Languages, User, Settings as SettingsIcon } from 'lucide-react';
+import { 
+    BookOpen, LogOut, Sun, Moon, Languages, 
+    User, Settings as SettingsIcon, Brain, 
+    Star, LayoutDashboard, MessageSquare, 
+    Zap, Activity, Shield, ShoppingBag, Sparkles, Users
+} from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 
 interface NavbarProps {
     onNavigate: (page: string, id?: string) => void;
-    onVisibilityChange?: (visible: boolean) => void;
+    currentPage: string;
 }
 
-const Navbar: React.FC<NavbarProps> = ({ onNavigate, onVisibilityChange }) => {
-    const { user, signOut, isAdmin } = useAuth();
-    const { theme, language, toggleTheme, toggleLanguage } = useTheme();
+const Navbar: React.FC<NavbarProps> = ({ onNavigate, currentPage }) => {
+    const { user, profile, signOut, isAdmin } = useAuth();
+    const { theme, toggleTheme } = useTheme();
+    const [scrolled, setScrolled] = useState(false);
     const [isVisible, setIsVisible] = useState(true);
+    const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+    const resetTimer = () => {
+        setIsVisible(true);
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        timeoutRef.current = setTimeout(() => {
+            setIsVisible(false);
+        }, 5000);
+    };
 
     useEffect(() => {
-        onVisibilityChange?.(isVisible);
-    }, [isVisible, onVisibilityChange]);
-
-    useEffect(() => {
-        let timeout: any;
-        const handleMouseMove = (e: MouseEvent) => {
-            if (e.clientY < 80) {
-                setIsVisible(true);
-            }
-            
-            clearTimeout(timeout);
-            timeout = setTimeout(() => {
-                if (e.clientY >= 80) {
-                    setIsVisible(false);
-                }
-            }, 3000);
+        const handleScroll = () => {
+            setScrolled(window.scrollY > 20);
+            resetTimer();
         };
+        const handleMouseMove = () => resetTimer();
 
+        window.addEventListener('scroll', handleScroll);
         window.addEventListener('mousemove', handleMouseMove);
-        return () => window.removeEventListener('mousemove', handleMouseMove);
+        
+        resetTimer();
+
+        return () => {
+            window.removeEventListener('scroll', handleScroll);
+            window.removeEventListener('mousemove', handleMouseMove);
+            if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        };
     }, []);
 
     const handleLogout = async () => {
@@ -42,130 +53,153 @@ const Navbar: React.FC<NavbarProps> = ({ onNavigate, onVisibilityChange }) => {
         onNavigate('home');
     };
 
+    const navItems = [
+        { id: 'dashboard', label: 'Command', icon: LayoutDashboard },
+        { id: 'documents', label: 'Library', icon: BookOpen },
+        { id: 'chat', label: 'Neural', icon: MessageSquare },
+        { id: 'quizzes', label: 'Quiz', icon: Brain },
+        { id: 'marketplace', label: 'Market', icon: ShoppingBag },
+        { id: 'summaryHub', label: 'Hub', icon: Sparkles },
+        { id: 'social', label: 'Social', icon: Users },
+        ...(isAdmin ? [{ id: 'admin', label: 'Admin', icon: Shield }] : []),
+    ];
+
     return (
-        <motion.nav
-            initial={{ y: 0 }}
-            animate={{ y: isVisible ? 0 : -100 }}
-            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-            className={`fixed top-0 left-0 right-0 z-[500] border-b backdrop-blur-xl transition-all duration-500 ${
-                theme === 'dark' ? 'bg-black/40 border-white/5' : 'bg-white/80 border-blue-100 shadow-sm'
-            }`}
-        >
-            <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+        <div className="fixed top-0 left-0 right-0 z-[1000] flex justify-center px-8 pointer-events-none">
+            <motion.nav
+                initial={{ y: -120, opacity: 0 }}
+                animate={{ 
+                    y: isVisible ? 24 : -120, 
+                    opacity: isVisible ? 1 : 0,
+                    scale: isVisible ? 1 : 0.95
+                }}
+                transition={{ 
+                    type: 'spring', 
+                    damping: 25, 
+                    stiffness: 120,
+                    opacity: { duration: 0.4 }
+                }}
+                className={`pointer-events-auto flex items-center gap-4 px-10 h-20 rounded-[2.5rem] border backdrop-blur-3xl transition-all duration-1000 ${
+                    scrolled 
+                        ? (theme === 'dark' ? 'bg-black/80 border-blue-500/40 shadow-[0_0_80px_rgba(37,99,235,0.3)]' : 'bg-white/90 border-blue-200 shadow-[0_10px_40px_rgba(0,0,0,0.1)]') 
+                        : (theme === 'dark' ? 'bg-black/50 border-white/10 shadow-3xl' : 'bg-white/50 border-slate-200 shadow-xl')
+                } w-full ${scrolled ? 'max-w-[98%]' : 'max-w-[95%]'}`}
+            >
+                {/* Logo & Identity */}
                 <motion.div 
-                    whileHover={{ scale: 1.05 }}
-                    onClick={() => onNavigate('home')}
-                    className="flex items-center gap-3 cursor-pointer group"
+                    whileHover={{ scale: 1.02 }}
+                    onClick={() => onNavigate('dashboard')}
+                    className={`flex items-center gap-3 cursor-pointer group pr-6 border-r shrink-0 ${theme === 'dark' ? 'border-white/10' : 'border-slate-200'}`}
                 >
-                    <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg group-hover:rotate-12 transition-all">
-                        <BookOpen className="text-white" size={20} />
+                    <div className="relative">
+                        <div className={`absolute inset-0 rounded-xl blur-lg animate-pulse ${theme === 'dark' ? 'bg-blue-500/50' : 'bg-blue-400/30'}`} />
+                        <div className="relative w-9 h-9 bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-2xl group-hover:rotate-[360deg] transition-all duration-1000 border border-white/20">
+                            <Zap className="text-white" size={18} fill="white" />
+                        </div>
                     </div>
-                    <div className="flex flex-col">
-                        <span className={`text-lg font-black italic tracking-tighter uppercase leading-none ${
-                            theme === 'dark' ? 'text-white' : 'text-slate-900'
-                        }`}>
-                            NEURAL <span className="text-blue-600">STUDY</span>
+                    <div className="hidden 2xl:block">
+                        <span className={`text-base font-black italic tracking-tighter uppercase block leading-none ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+                            NEURAL <span className="text-blue-500">CORE</span>
                         </span>
-                        <span className="text-[10px] font-black text-gray-500 uppercase tracking-[0.3em]">Grid v2.4</span>
                     </div>
                 </motion.div>
 
-                <div className="hidden lg:flex items-center gap-2 mx-8">
-                    {[
-                        { id: 'dashboard', label: 'Dashboard' },
-                        { id: 'calendar', label: 'Timeline' },
-                        { id: 'documents', label: 'Library' },
-                        { id: 'chat', label: 'Chat' },
-                        { id: 'flashcards', label: 'Cards' },
-                        { id: 'quizzes', label: 'Quiz' },
-                        { id: 'neuralSummary', label: 'Synthesis' },
-                        { id: 'studyTimeline', label: 'Journal page' },
-                        { id: 'pomodoro', label: 'Focus' },
-                        ...(isAdmin ? [{ id: 'admin', label: 'Admin' }] : []),
-                    ].map((item) => (
-                        <motion.button
-                            key={item.id}
-                            whileHover={{ scale: 1.05, y: -2 }}
-                            whileTap={{ scale: 0.95 }}
-                            onClick={() => onNavigate(item.id)}
-                            className={`px-3 py-2 text-[9px] font-black uppercase tracking-[0.2em] transition-colors ${
-                                theme === 'dark' ? 'text-gray-400 hover:text-white' : 'text-slate-600 hover:text-blue-600'
-                            }`}
-                        >
-                            {item.label}
-                        </motion.button>
-                    ))}
+                {/* Main Navigation - High Density */}
+                <div className="flex-1 flex justify-center items-center gap-1.5 overflow-x-auto scrollbar-hide py-2">
+                    {navItems.map((item) => {
+                        const isActive = currentPage === item.id;
+                        return (
+                            <motion.button
+                                key={item.id}
+                                whileHover={{ y: -2, scale: 1.02 }}
+                                whileTap={{ scale: 0.98 }}
+                                onClick={() => onNavigate(item.id)}
+                                className={`px-4 py-2 rounded-xl flex items-center gap-2.5 transition-all group whitespace-nowrap ${
+                                    isActive 
+                                    ? 'bg-blue-600 text-white shadow-[0_0_30px_rgba(37,99,235,0.4)] border border-blue-400/50' 
+                                    : (theme === 'dark' ? 'text-white/40 hover:text-white hover:bg-white/5' : 'text-slate-500 hover:text-blue-600 hover:bg-blue-50')
+                                }`}
+                            >
+                                <item.icon size={14} className={isActive ? 'animate-pulse' : 'group-hover:scale-110 transition-transform'} />
+                                <span className="text-[9px] font-black uppercase tracking-[0.15em]">{item.label}</span>
+                            </motion.button>
+                        );
+                    })}
                 </div>
 
-                <div className="flex items-center gap-3 md:gap-6">
-                    {/* Theme Toggle */}
-                    <motion.button
-                        whileHover={{ scale: 1.1, backgroundColor: theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }}
-                        whileTap={{ scale: 0.9 }}
-                        onClick={toggleTheme}
-                        className={`p-3 rounded-xl border transition-all flex items-center justify-center relative group ${
-                            theme === 'dark' ? 'border-white/10 text-gray-400 hover:text-white' : 'border-blue-100 text-slate-500 hover:text-blue-600'
-                        }`}
-                    >
-                        {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
-                    </motion.button>
-
-                    {/* Language Toggle */}
-                    <motion.button
-                        whileHover={{ scale: 1.1, backgroundColor: theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }}
-                        whileTap={{ scale: 0.9 }}
-                        onClick={toggleLanguage}
-                        className={`p-3 rounded-xl border transition-all flex items-center gap-2 group relative ${
-                            theme === 'dark' ? 'border-white/10 text-gray-400 hover:text-white' : 'border-blue-100 text-slate-500 hover:text-blue-600'
-                        }`}
-                    >
-                        <Languages size={20} />
-                        <span className="text-xs font-black uppercase tracking-widest hidden md:block">
-                            {language === 'en' ? 'Arabic' : 'English'}
-                        </span>
-                    </motion.button>
-
-                    {/* Profile & Settings */}
-                    {user && (
-                        <div className="flex items-center gap-4 border-l pl-6 transition-colors border-white/10 dark:border-white/10 border-blue-100">
-                            <motion.button
-                                whileHover={{ scale: 1.05 }}
-                                onClick={() => onNavigate('settings')}
-                                className="flex items-center gap-3 group"
-                            >
-                                <div className="hidden lg:flex flex-col items-end">
-                                    <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest leading-none mb-1">Unit Active</span>
-                                    <span className={`text-xs font-bold transition-colors ${theme === 'dark' ? 'text-gray-300' : 'text-slate-600'}`}>
-                                        {user.user_metadata?.username || user.email?.split('@')[0]}
-                                    </span>
-                                </div>
-                                <div className={`w-10 h-10 rounded-xl overflow-hidden border-2 transition-all ${
-                                    theme === 'dark' ? 'border-white/10 group-hover:border-blue-500' : 'border-blue-100 group-hover:border-blue-600'
-                                }`}>
-                                    {user.user_metadata?.avatar_url ? (
-                                        <img src={user.user_metadata.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
-                                    ) : (
-                                        <div className="w-full h-full flex items-center justify-center bg-blue-600/10 text-blue-600">
-                                            <User size={20} />
-                                        </div>
-                                    )}
-                                </div>
-                            </motion.button>
-
-                            <motion.button
-                                whileHover={{ scale: 1.1, backgroundColor: 'rgba(239,68,68,0.1)' }}
-                                whileTap={{ scale: 0.9 }}
-                                onClick={handleLogout}
-                                className="p-3 rounded-xl border border-red-500/20 text-red-500 hover:bg-red-500 hover:text-white transition-all"
-                                title="Terminate Session"
-                            >
-                                <LogOut size={20} />
-                            </motion.button>
+                {/* User Telemetry & Status */}
+                <div className={`flex items-center gap-4 pl-6 border-l shrink-0 ${theme === 'dark' ? 'border-white/10' : 'border-slate-200'}`}>
+                    {/* Level & XP Bar */}
+                    <div className="hidden md:flex flex-col items-end gap-1.5 min-w-[100px]">
+                        <div className="flex items-center gap-2">
+                            <span className="text-[8px] font-black text-blue-500 uppercase tracking-widest">Level {profile?.level || 1}</span>
+                            <div className={`w-1 h-1 rounded-full ${theme === 'dark' ? 'bg-white/20' : 'bg-slate-300'}`} />
+                            <span className={`text-[8px] font-black uppercase tracking-widest ${theme === 'dark' ? 'text-white/40' : 'text-slate-400'}`}>{profile?.xp || 0} XP</span>
                         </div>
-                    )}
+                        <div className={`w-full h-1 rounded-full overflow-hidden border ${theme === 'dark' ? 'bg-white/5 border-white/5' : 'bg-slate-100 border-slate-200'}`}>
+                            <motion.div 
+                                initial={{ width: 0 }}
+                                animate={{ width: `${(profile?.xp || 0) % 100}%` }}
+                                className="h-full bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]"
+                            />
+                        </div>
+                    </div>
+
+                    {/* Streak */}
+                    <div className={`hidden sm:flex items-center gap-2 px-3 py-1.5 border rounded-lg ${theme === 'dark' ? 'bg-rose-500/10 border-rose-500/20 text-rose-500' : 'bg-rose-50 border-rose-100 text-rose-600'}`}>
+                        <Activity size={12} />
+                        <span className="text-[10px] font-black italic tabular-nums">{profile?.daily_streak || 0}</span>
+                    </div>
+
+                    {/* Stars */}
+                    <motion.div 
+                        whileHover={{ scale: 1.05 }}
+                        className={`flex items-center gap-2 px-4 py-2 border rounded-xl cursor-default group ${theme === 'dark' ? 'bg-amber-500/10 border-amber-500/30' : 'bg-amber-50 border-amber-200'}`}
+                    >
+                        <Star className="text-amber-500 fill-amber-500 animate-pulse" size={14} />
+                        <span className={`text-sm font-black italic tracking-tighter tabular-nums leading-none ${theme === 'dark' ? 'text-amber-500' : 'text-amber-600'}`}>
+                            {profile?.stars_count ?? 0}
+                        </span>
+                    </motion.div>
+
+                    <div className="flex items-center gap-2">
+                        <button 
+                            onClick={toggleTheme} 
+                            className={`p-2 rounded-lg transition-all ${theme === 'dark' ? 'text-white/40 hover:text-white hover:bg-white/5' : 'text-slate-400 hover:text-blue-600 hover:bg-blue-50'}`}
+                        >
+                            {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+                        </button>
+                        
+                        {user && (
+                            <div className="flex items-center gap-2 ml-1">
+                                <motion.button
+                                    whileHover={{ scale: 1.1 }}
+                                    onClick={() => onNavigate('profile')}
+                                    className={`w-9 h-9 rounded-xl overflow-hidden border-2 transition-all shadow-xl p-0.5 ${theme === 'dark' ? 'border-white/20 bg-black/60 hover:border-blue-500' : 'border-slate-200 bg-white hover:border-blue-400'}`}
+                                >
+                                    <div className="w-full h-full rounded-lg overflow-hidden">
+                                        {user.user_metadata?.avatar_url || profile?.avatar_url ? (
+                                            <img src={user.user_metadata?.avatar_url || profile?.avatar_url} alt="" className="w-full h-full object-cover" />
+                                        ) : (
+                                            <div className="w-full h-full bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white text-[10px] font-black uppercase tracking-tighter">
+                                                {user.email?.[0].toUpperCase()}
+                                            </div>
+                                        )}
+                                    </div>
+                                </motion.button>
+                                
+                                <button 
+                                    onClick={handleLogout}
+                                    className={`p-2 rounded-lg transition-all ${theme === 'dark' ? 'text-white/20 hover:text-red-500' : 'text-slate-300 hover:text-red-500 hover:bg-red-50'}`}
+                                >
+                                    <LogOut size={18} />
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
-            </div>
-        </motion.nav>
+            </motion.nav>
+        </div>
     );
 };
 

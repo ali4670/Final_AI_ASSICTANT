@@ -6,60 +6,69 @@
   :root {
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
+    --accent-blue: 217 91% 60%;
+    --accent-indigo: 239 84% 67%;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
+    --background: 240 10% 4%;
     --foreground: 210 40% 98%;
   }
 }
 
+@layer components {
+  .glass-card {
+    @apply backdrop-blur-3xl bg-white/5 border border-white/10 shadow-2xl;
+  }
+  
+  .glass-pill {
+    @apply backdrop-blur-2xl bg-black/40 border border-white/5 rounded-full px-8 py-4 shadow-[0_0_30px_rgba(0,0,0,0.5)];
+  }
+
+  .neon-text-blue {
+    @apply text-blue-500 [text-shadow:0_0_20px_rgba(59,130,246,0.5)];
+  }
+}
+
 @layer utilities {
-  .perspective-1000 {
-    perspective: 1000px;
+  .perspective-2000 {
+    perspective: 2000px;
   }
   .transform-style-3d {
     transform-style: preserve-3d;
   }
-  .backface-hidden {
-    backface-visibility: hidden;
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
   }
-  .rotate-y-180 {
-    transform: rotateY(180deg);
+  .animate-pulse-glow {
+    animation: pulse-glow 3s ease-in-out infinite;
   }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0) rotate(0); }
+  50% { transform: translateY(-20px) rotate(2deg); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.3; filter: blur(100px); }
+  50% { opacity: 0.6; filter: blur(130px); }
 }
 
 body {
-  @apply transition-colors duration-700 font-sans antialiased;
+  @apply transition-colors duration-1000 font-sans antialiased overflow-x-hidden selection:bg-blue-600/30;
+  background-color: #050505; /* Force dark background for high-fidelity look */
 }
 
-/* Custom Scrollbar for Lando Norris Aesthetic */
-::-webkit-scrollbar {
-  width: 10px;
-}
-
-::-webkit-scrollbar-track {
-  @apply bg-[#050505];
-}
-
+/* Custom Scrollbar */
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { @apply bg-transparent; }
 ::-webkit-scrollbar-thumb {
-  @apply bg-blue-600/20 border-2 border-transparent bg-clip-content rounded-full;
+  @apply bg-white/10 rounded-full border-4 border-transparent bg-clip-content hover:bg-white/20 transition-all;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  @apply bg-blue-500/40;
+/* Isometric Helper */
+.isometric-view {
+  transform: rotateX(60deg) rotateZ(-45deg);
 }
 
-/* Lando Norris Neon Glows */
-.neon-glow-blue {
-  box-shadow: 0 0 15px rgba(59, 130, 246, 0.5);
-}
-
-.neon-glow-indigo {
-  box-shadow: 0 0 15px rgba(99, 102, 241, 0.5);
-}
-
-/* RTL Support */
-[dir="rtl"] {
-  font-family: 'Inter', 'Noto Sans Arabic', sans-serif;
-}

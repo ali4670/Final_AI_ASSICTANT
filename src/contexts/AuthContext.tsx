@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 interface AuthContextType {
   user: User | null;
   session: Session | null;
+  profile: any | null;
   isGuest: boolean;
   isAdmin: boolean;
   loading: boolean;
@@ -15,6 +16,7 @@ interface AuthContextType {
   updateProfile: (data: { username?: string; avatar_url?: string; phone?: string }) => Promise<{ error: Error | null }>;
   changePassword: (newPassword: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -22,14 +24,28 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
+  const [profile, setProfile] = useState<any | null>(null);
   const [isGuest, setIsGuest] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  const fetchProfile = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
+      
+      if (error) throw error;
+      setProfile(data);
+    } catch (err) {
+      console.error("Error fetching profile:", err);
+    }
+  };
+
   useEffect(() => {
-    // Handle case where Supabase is not configured
     if (!supabase) {
-      console.warn('Supabase is not configured. Please add environment variables.');
       setLoading(false);
       return;
     }
@@ -37,6 +53,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
+      if (session?.user) {
+        fetchProfile(session.user.id);
+      }
       setIsGuest(session?.user?.email === 'guest@neuralstudy.ai');
       setIsAdmin(session?.user?.email === 'aliopooopp3@gmail.com' || session?.user?.user_metadata?.is_admin === true);
       setLoading(false);
@@ -45,6 +64,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
+      if (session?.user) {
+        fetchProfile(session.user.id);
+      } else {
+        setProfile(null);
+      }
       setIsGuest(session?.user?.email === 'guest@neuralstudy.ai');
       setIsAdmin(session?.user?.email === 'aliopooopp3@gmail.com' || session?.user?.user_metadata?.is_admin === true);
     });
@@ -52,66 +76,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Real-time profile updates
+  useEffect(() => {
+    if (!user || !supabase) return;
+
+    const channel = supabase
+      .channel(`profile:${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'profiles',
+          filter: `id=eq.${user.id}`
+        },
+        (payload) => {
+          setProfile(payload.new);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
+
   const signUp = async (email: string, password: string, username?: string, phone?: string) => {
-    if (!supabase) {
-      return { error: new Error('Supabase is not configured') };
-    }
+    if (!supabase) return { error: new Error('Supabase not configured') };
     try {
       const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            username: username || email.split('@')[0],
-            phone: phone || '',
-          }
-        }
+        email, password,
+        options: { data: { username: username || email.split('@')[0], phone: phone || '' } }
       });
-      
-      if (error) {
-        // Check for rate limit error
-        if (error.message.includes('rate limit') || error.message.includes('too many requests')) {
-          return { error: new Error('Too many requests. Please wait a moment and try again.') };
-        }
-        return { error };
-      }
-      
-      return { error: null };
-    } catch (error) {
-      const err = error as Error;
-      if (err.message.includes('rate limit') || err.message.includes('too many requests')) {
-        return { error: new Error('Too many requests. Please wait a moment and try again.') };
-      }
-      return { error: err };
-    }
+      return { error };
+    } catch (error: any) { return { error }; }
   };
 
   const signIn = async (email: string, password: string) => {
-    if (!supabase) {
-      return { error: new Error('Supabase is not configured') };
-    }
+    if (!supabase) return { error: new Error('Supabase not configured') };
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-      
-      if (error) {
-        // Check for rate limit error
-        if (error.message.includes('rate limit') || error.message.includes('too many requests')) {
-          return { error: new Error('Too many login attempts. Please wait a moment and try again.') };
-        }
-        return { error };
-      }
-      
-      return { error: null };
-    } catch (error) {
-      const err = error as Error;
-      if (err.message.includes('rate limit') || err.message.includes('too many requests')) {
-        return { error: new Error('Too many login attempts. Please wait a moment and try again.') };
-      }
-      return { error: err };
-    }
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      return { error };
+    } catch (error: any) { return { error }; }
   };
 
   const signInWithGithub = async () => {
@@ -119,95 +125,60 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'github',
-        options: {
-          redirectTo: window.location.origin
-        }
+        options: { redirectTo: window.location.origin }
       });
       return { error };
-    } catch (error: any) {
-      return { error };
-    }
+    } catch (error: any) { return { error }; }
   };
 
   const signInAsGuest = async () => {
     if (!supabase) return { error: new Error('Supabase not configured') };
     const GUEST_EMAIL = 'guest@neuralstudy.ai';
     const GUEST_PWD = 'NeuroGuestLogin2026!';
-    
     try {
-      // Try to sign in
-      const { error: loginError } = await supabase.auth.signInWithPassword({
-        email: GUEST_EMAIL,
-        password: GUEST_PWD
-      });
-
-      // If user doesn't exist, create the guest account once
+      const { error: loginError } = await supabase.auth.signInWithPassword({ email: GUEST_EMAIL, password: GUEST_PWD });
       if (loginError && loginError.message.includes('Invalid login credentials')) {
         const { error: signUpError } = await supabase.auth.signUp({
-          email: GUEST_EMAIL,
-          password: GUEST_PWD,
+          email: GUEST_EMAIL, password: GUEST_PWD,
           options: { data: { username: 'Guest_Explorer' } }
         });
         return { error: signUpError };
       }
-
       return { error: loginError };
-    } catch (error: any) {
-      return { error };
-    }
+    } catch (error: any) { return { error }; }
   };
 
   const updateProfile = async (data: { username?: string; avatar_url?: string; phone?: string }) => {
     if (!supabase) return { error: new Error('Supabase not configured') };
     try {
-      // 1. Update Auth Metadata
-      const { error: authError } = await supabase.auth.updateUser({
-        data: data
-      });
+      const { error: authError } = await supabase.auth.updateUser({ data });
       if (authError) throw authError;
-
-      // 2. Sync with public.profiles table
-      const updateData: any = {};
-      if (data.username) updateData.username = data.username;
-      if (data.phone) updateData.phone = data.phone;
-      if (data.avatar_url) updateData.avatar_url = data.avatar_url;
-
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update(updateData)
-        .eq('id', user?.id);
-      
+      const { error: profileError } = await supabase.from('profiles').update(data).eq('id', user?.id);
       if (profileError) throw profileError;
-
       return { error: null };
-    } catch (error: any) {
-      return { error };
-    }
+    } catch (error: any) { return { error }; }
   };
 
   const changePassword = async (newPassword: string) => {
     if (!supabase) return { error: new Error('Supabase not configured') };
     try {
-      const { error } = await supabase.auth.updateUser({
-        password: newPassword
-      });
-      if (error) throw error;
-      return { error: null };
-    } catch (error: any) {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
       return { error };
-    }
+    } catch (error: any) { return { error }; }
+  };
+
+  const refreshProfile = async () => {
+    if (user) await fetchProfile(user.id);
   };
 
   const signOut = async () => {
-    if (!supabase) {
-      return;
-    }
-    await supabase.auth.signOut();
+    if (supabase) await supabase.auth.signOut();
   };
 
   const value = {
     user,
     session,
+    profile,
     isGuest,
     isAdmin,
     loading,
@@ -218,6 +189,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     updateProfile,
     changePassword,
     signOut,
+    refreshProfile
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

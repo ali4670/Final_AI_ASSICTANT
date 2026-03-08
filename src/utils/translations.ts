@@ -3,16 +3,18 @@ export const translations = {
     dashboard: {
       hello: "Hello,",
       search: "Execute search protocol...",
+      neuralFocus: "Neural Focus Mode",
+      startSession: "Initialize deep work session",
       stats: {
         objects: "Neural Objects",
         cards: "Recall Nodes",
         sync: "Sync Cycles",
-        streak: "Temporal Streak"
+        streak: "Temporal Streak",
+        stars: "Stellar Merit"
       },
       menu: {
         library: { title: "Neural Library", desc: "Central repository for processed academic data fragments." },
         chat: { title: "Neural Sync", desc: "Real-time cognitive interaction with your Neural Study core." },
-        journal: { title: "Neural Journal", desc: "Task tracking and cognitive planning interface." },
         cards: { title: "Recall Nodes", desc: "Optimized spaced-repetition engine for data retention." },
         quiz: { title: "Evaluation", desc: "Neural testing protocols to verify information mastery." },
         roadmap: { title: "Temporal Map", desc: "Long-term visualization of your academic structure." },
@@ -32,16 +34,6 @@ export const translations = {
       empty: "Neural library empty",
       emptyDesc: "Upload your first data fragment to begin the analysis process."
     },
-    journal: {
-      title: "Journal",
-      temporal: "Temporal Selection",
-      append: "Append Task",
-      command: "Command Description",
-      execution: "Scheduled Execution",
-      commit: "Commit Task",
-      nodes: "Nodes",
-      empty: "No tasks indexed for this cycle"
-    },
     roadmap: {
       title: "Timeline",
       core: "Core Parameters",
@@ -57,16 +49,18 @@ export const translations = {
     dashboard: {
       hello: "مرحباً،",
       search: "تنفيذ بروتوكول البحث...",
+      neuralFocus: "وضع التركيز العصبي",
+      startSession: "تهيئة جلسة العمل العميق",
       stats: {
         objects: "الأجسام العصبية",
         cards: "عقد الاستدعاء",
         sync: "دورات المزامنة",
-        streak: "سلسلة الإنجاز"
+        streak: "سلسلة الإنجاز",
+        stars: "الاستحقاق النجمي"
       },
       menu: {
         library: { title: "المكتبة العصبية", desc: "المستودع المركزي لقطع البيانات الأكاديمية المعالجة." },
         chat: { title: "المزامنة العصبية", desc: "تفاعل معرفي فوري مع قلب مستنداتك في نيورال ستادي." },
-        journal: { title: "اليوميات العصبية", desc: "تتبع المهام وواجهة التخطيط المعرفي." },
         cards: { title: "عقد الاستدعاء", desc: "محرك تكرار متباعد محسن للاحتفاظ بالبيانات." },
         quiz: { title: "التقييم", desc: "بروتوكولات اختبار عصبية للتحقق من إتقان المعلومات." },
         roadmap: { title: "الخريطة الزمنية", desc: "تصور طويل المدى لهيكلك الأكاديمي." },
@@ -85,16 +79,6 @@ export const translations = {
       commit: "إيداع في قاعدة البيانات",
       empty: "المكتبة العصبية فارغة",
       emptyDesc: "قم بتحميل أول قطعة بيانات لبدء عملية التحليل."
-    },
-    journal: {
-      title: "اليوميات",
-      temporal: "الاختيار الزمني",
-      append: "إضافة مهمة",
-      command: "وصف الأمر",
-      execution: "التنفيذ المجدول",
-      commit: "تثبيت المهمة",
-      nodes: "عقد",
-      empty: "لا توجد مهام مفهرسة لهذه الدورة"
     },
     roadmap: {
       title: "الجدول الزمني",

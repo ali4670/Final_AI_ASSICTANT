@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Timer, Play, Pause, RefreshCw, X, MessageSquare } from 'lucide-react';
+import { Timer, Play, Pause, RefreshCw, X, MessageSquare, TreeDeciduous, Home } from 'lucide-react';
 import { useTimer } from '../contexts/TimerContext';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -11,7 +11,10 @@ interface PomodoroTimerProps {
 const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ onNavigate }) => {
   const [isOpen, setIsOpen] = useState(false);
   const { theme } = useTheme();
-  const { timeLeft, isActive, mode, toggleTimer, resetTimer, currentTask } = useTimer();
+  const { 
+    timeLeft, isActive, mode, toggleTimer, resetTimer, currentTask,
+    constructionTarget, setConstructionTarget 
+  } = useTimer();
 
   const modes = {
     work: { label: 'Focus', color: 'text-blue-500' },
@@ -61,9 +64,27 @@ const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ onNavigate }) => {
                     </button>
                 </div>
 
-                <div className={`p-3 rounded-xl mb-6 border ${theme === 'dark' ? 'bg-white/5 border-white/5' : 'bg-slate-100 border-slate-200'}`}>
+                <div className={`p-3 rounded-xl mb-4 border ${theme === 'dark' ? 'bg-white/5 border-white/5' : 'bg-slate-100 border-slate-200'}`}>
                     <span className="text-[9px] font-black uppercase tracking-widest opacity-30 block mb-1">Target Module</span>
                     <span className="text-xs font-bold truncate block">{currentTask}</span>
+                </div>
+
+                {/* Construction Choice */}
+                <div className="grid grid-cols-2 gap-3 mb-6">
+                    <button 
+                        onClick={() => setConstructionTarget('tree')}
+                        className={`p-3 rounded-2xl border transition-all flex flex-col items-center gap-2 ${constructionTarget === 'tree' ? 'bg-emerald-500/20 border-emerald-500 text-emerald-500' : 'bg-white/5 border-white/5 opacity-40 hover:opacity-100'}`}
+                    >
+                        <TreeDeciduous size={20} />
+                        <span className="text-[8px] font-black uppercase tracking-widest">Build Tree</span>
+                    </button>
+                    <button 
+                        onClick={() => setConstructionTarget('house')}
+                        className={`p-3 rounded-2xl border transition-all flex flex-col items-center gap-2 ${constructionTarget === 'house' ? 'bg-amber-500/20 border-amber-500 text-amber-500' : 'bg-white/5 border-white/5 opacity-40 hover:opacity-100'}`}
+                    >
+                        <Home size={20} />
+                        <span className="text-[8px] font-black uppercase tracking-widest">Build House</span>
+                    </button>
                 </div>
 
                 <div className="text-center mb-6">

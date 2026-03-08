@@ -1,73 +1,108 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
+import {
   Play, Pause, RefreshCw, Settings, 
-  BookOpen, X, Maximize2, 
-  Palette, Clock, Zap, Minimize2, 
-  Coffee, School, Bed, Monitor, Home,
-  Wind, Sparkles, Waves, Leaf, ChevronLeft, CloudRain, Snowflake, Sun,
-  Bell, Volume2
+  BookOpen, X,  
+  Palette, Clock, Zap, 
+  Home as HomeIcon,
+  Wind, Leaf, Dog, Droplets, Bot, ArrowLeft, 
+  ChevronRight, Trophy, Box, Fence as FenceIcon,
+  LayoutGrid, Maximize2, Minimize2, Volume2
 } from 'lucide-react';
-import { useTimer } from '../contexts/TimerContext';
+import { useTimer, ConstructionType } from '../contexts/TimerContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { useNeuralVoice } from '../hooks/useNeuralVoice';
 import WeatherEffects from '../components/WeatherEffects';
-import { Canvas } from '@react-three/fiber';
-import FocusBiome from '../components/3D/FocusBiome';
 
 interface Props {
     onNavigate: (page: string) => void;
 }
 
+const constructionOptions: { id: ConstructionType, icon: any, label: string }[] = [
+    { id: 'tree', icon: Leaf, label: 'Tree' },
+    { id: 'house', icon: HomeIcon, label: 'House' },
+    { id: 'barn', icon: HomeIcon, label: 'Barn' },
+    { id: 'windmill', icon: Wind, label: 'Mill' },
+    { id: 'sheep', icon: Dog, label: 'Sheep' },
+    { id: 'robot', icon: Bot, label: 'Robot' },
+    { id: 'fountain', icon: Droplets, label: 'Zen' },
+    { id: 'monolith', icon: Trophy, label: 'Core' },
+    { id: 'bush', icon: Box, label: 'Bush' },
+    { id: 'fence', icon: FenceIcon, label: 'Gate' }
+];
+
+const scenes = [
+    { name: 'Neural Void', type: 'none', class: 'bg-[#020202]', live: 'from-blue-900/10 to-black' },
+    { name: 'Coffee Shop', type: 'coffee', class: 'bg-[#1a1410]', live: 'from-orange-950/20 to-black' },
+    { name: 'Library Hall', type: 'library', class: 'bg-[#0f111a]', live: 'from-indigo-900/20 to-black' },
+    { name: 'Deep Night', type: 'night', class: 'bg-[#050505]', live: 'from-purple-950/20 to-black' },
+    { name: 'Sunset Ridge', type: 'sunset', class: 'bg-[#1a0f05]', live: 'from-orange-900/20 to-black' },
+    { name: 'Bio Forest', type: 'forest', class: 'bg-[#051a05]', live: 'from-emerald-950/20 to-black' },
+    { name: 'Mars Colony', type: 'mars', class: 'bg-[#1a0505]', live: 'from-red-950/20 to-black' },
+    { name: 'Deep Ocean', type: 'ocean', class: 'bg-[#050f1a]', live: 'from-blue-950/30 to-black' }
+];
+
 const Pomodoro: React.FC<Props> = ({ onNavigate }) => {
     const { user } = useAuth();
-    const { theme } = useTheme();
+    const { theme, useVoice } = useTheme();
+    const { speak } = useNeuralVoice();
     
     const { 
         timeLeft, isActive, mode, toggleTimer, resetTimer, 
         setMode, settings, setSettings, streak, cycle, 
-        currentTask, setCurrentTask, bellSound, setBellSound, growthPoints
+        currentSubject, setCurrentSubject,
+        currentLesson, setCurrentLesson,
+        constructionTarget, setConstructionTarget
     } = useTimer();
     
-    // UI State
-    const [showSettings, setShowSettings] = useState(false);
+    const [showConfig, setShowConfig] = useState(false);
     const [showAmbient, setShowAmbient] = useState(false);
+    const [showBlueprint, setShowBlueprint] = useState(false);
+    const [showSubjectSelector, setShowSubjectSelector] = useState(false);
     const [weather, setWeather] = useState<'none' | 'rain' | 'snow'>('none');
     const [sceneIndex, setSceneIndex] = useState(0);
-    const [isZenMode, setIsZenMode] = useState(false);
     const [isFullscreen, setIsFullscreen] = useState(false);
-    const [isLiveMode, setIsLiveMode] = useState(true);
+    const [subjects, setSubjects] = useState<any[]>([]);
+    const [aiInsight, setAiInsight] = useState<string | null>(null);
 
-    const [journal, setJournal] = useState<any[]>([]);
-
-    const scenes = [
-        { name: 'Neural Void', icon: Zap, class: 'bg-[#050505]', live: 'bg-black', music: 'Deep focus' },
-        { name: 'Coffee Shop', icon: Coffee, class: 'bg-[#1a1410]', live: 'from-orange-950/20 to-black', music: 'Lofi Beats' },
-        { name: 'Library Hall', icon: School, class: 'bg-[#0f111a]', live: 'from-indigo-900/20 to-black', music: 'Classical' },
-        { name: 'Sleepy Dorm', icon: Bed, class: 'bg-[#1a0f16]', live: 'from-rose-900/20 to-black', music: 'Ambient' },
-        { name: 'Home Desk', icon: Monitor, class: 'bg-[#0f1a14]', live: 'from-emerald-900/20 to-black', music: 'White Noise' }
-    ];
-
-    const bellSounds = [
-        { name: 'Classic Bell', url: 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3' },
-        { name: 'Digital Alert', url: 'https://assets.mixkit.co/active_storage/sfx/951/951-preview.mp3' },
-        { name: 'Zen Bowl', url: 'https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3' },
-        { name: 'Echo Ding', url: 'https://assets.mixkit.co/active_storage/sfx/3005/3005-preview.mp3' }
-    ];
-
-    const currentScene = scenes[sceneIndex];
+    const toggleFullscreen = () => {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen().catch((err) => {
+                console.error(`Error enabling fullscreen: ${err.message}`);
+            });
+        } else {
+            document.exitFullscreen();
+        }
+    };
 
     useEffect(() => {
-        const fetchJournal = async () => {
+        const handleFSChange = () => setIsFullscreen(!!document.fullscreenElement);
+        document.addEventListener('fullscreenchange', handleFSChange);
+        return () => document.removeEventListener('fullscreenchange', handleFSChange);
+    }, []);
+
+    useEffect(() => {
+        const fetchSubjects = async () => {
             if (!user) return;
             try {
-                const res = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:4000'}/api/get-study/${user.id}`);
+                const res = await fetch(`/api/get-study/${user.id}`);
                 const data = await res.json();
-                if (data) setJournal(data.subjects || []);
+                if (data && data.subjects) setSubjects(data.subjects);
             } catch (err) { console.error(err); }
         };
-        fetchJournal();
+        fetchSubjects();
     }, [user]);
+
+    useEffect(() => {
+        if (isActive && mode === 'work' && timeLeft < settings.work * 60 * 0.5 && !aiInsight) {
+            const insights = ["Deep work protocol active.", "Focus levels optimal.", "Stay hydrated.", "Flow state detected."];
+            const msg = insights[Math.floor(Math.random() * insights.length)];
+            setAiInsight(msg);
+            if (useVoice) speak(msg);
+            setTimeout(() => setAiInsight(null), 5000);
+        }
+    }, [isActive, mode, timeLeft, useVoice, speak]);
 
     const formatTime = (seconds: number) => {
         const m = Math.floor(seconds / 60);
@@ -75,279 +110,182 @@ const Pomodoro: React.FC<Props> = ({ onNavigate }) => {
         return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
     };
 
-    const toggleFullscreen = () => {
-        if (!document.fullscreenElement) {
-            document.documentElement.requestFullscreen();
-            setIsFullscreen(true);
-        } else {
-            if (document.exitFullscreen) {
-                document.exitFullscreen();
-                setIsFullscreen(false);
-            }
-        }
-    };
-
-    const toggleSettings = () => {
-        setShowAmbient(false);
-        setShowSettings(!showSettings);
-    };
-
-    const toggleAmbient = () => {
-        setShowSettings(false);
-        setShowAmbient(!showAmbient);
-    };
-
     return (
-        <div className={`min-h-screen transition-all duration-1000 relative overflow-hidden ${currentScene.class} text-white flex flex-col items-center justify-center font-sans`}>
+        <div className={`h-screen w-screen transition-all duration-1000 relative overflow-hidden ${scenes[sceneIndex].class} text-white flex flex-col items-center justify-center font-sans`}>
             
             <AnimatePresence>
-                {isLiveMode && (
-                    <motion.div 
-                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                        className={`absolute inset-0 bg-gradient-to-br ${currentScene.live} pointer-events-none`}
-                    >
-                        <motion.div 
-                            animate={{ 
-                                scale: [1, 1.2, 1],
-                                opacity: [0.2, 0.4, 0.2],
-                                x: [0, 100, 0],
-                                y: [0, 50, 0]
-                            }}
-                            transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-                            className="absolute -top-[10%] -left-[10%] w-[80%] h-[80%] bg-blue-500/10 rounded-full blur-[150px]"
-                        />
-                    </motion.div>
-                )}
+                <motion.div key={sceneIndex} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={`absolute inset-0 bg-gradient-to-br ${scenes[sceneIndex].live} pointer-events-none opacity-20`} />
             </AnimatePresence>
 
-            <WeatherEffects type={weather} intensity={weather === 'rain' ? 80 : 40} />
+            <WeatherEffects type={weather !== 'none' ? weather : (scenes[sceneIndex].type as any)} />
 
-            {/* 3D FOCUS BIOME */}
-            <div className="fixed bottom-10 left-10 w-64 h-64 z-40 pointer-events-none hidden lg:block">
-                <Canvas camera={{ position: [0, 1, 4], fov: 40 }}>
-                    <ambientLight intensity={0.5} />
-                    <pointLight position={[10, 10, 10]} intensity={1} />
-                    <FocusBiome growth={growthPoints} />
-                </Canvas>
-                <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 w-full text-center">
-                    <p className="text-[8px] font-black uppercase tracking-[0.4em] text-blue-500 opacity-40">Neural Biome Link</p>
-                    <p className="text-[10px] font-black italic uppercase tracking-tighter text-white">Growth Index: {growthPoints}</p>
+            {/* TOP HUD */}
+            <div className="absolute top-8 left-8 right-8 flex justify-between items-center z-50 pointer-events-none">
+                <div className="flex items-center gap-4 pointer-events-auto">
+                    <button onClick={() => onNavigate('dashboard')} className="p-3 bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl hover:bg-white/10 transition-all text-white group">
+                        <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
+                    </button>
+                    <div className="flex flex-col">
+                        <span className="text-[8px] font-black uppercase tracking-[0.4em] text-emerald-500 mb-0.5">Focus Node</span>
+                        <div className="flex items-center gap-2">
+                            <h2 className="text-lg font-black italic tracking-tighter uppercase tabular-nums">{currentSubject || 'Protocol'} // {currentLesson || 'Fragment'}</h2>
+                            <button onClick={() => setShowSubjectSelector(true)} className="p-1 bg-white/10 rounded-md hover:bg-white/20 transition-all border border-white/5"><LayoutGrid size={12} /></button>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="flex items-center gap-3 pointer-events-auto bg-black/40 backdrop-blur-2xl border border-white/10 px-5 py-2 rounded-full shadow-2xl">
+                    <div className="flex items-center gap-2">
+                        <Zap size={12} className="text-yellow-400 fill-yellow-400" />
+                        <span className="text-[8px] font-black uppercase tracking-widest">{streak} Streak</span>
+                    </div>
+                    <div className="w-px h-3 bg-white/10" />
+                    <div className="flex items-center gap-2 mr-1">
+                        <Clock size={12} className="text-blue-400" />
+                        <span className="text-[8px] font-black uppercase tracking-widest">Cycle {cycle}/4</span>
+                    </div>
+                    <button onClick={toggleFullscreen} className="p-1.5 hover:bg-white/10 rounded-lg transition-all text-white/60 hover:text-white">
+                        {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+                    </button>
                 </div>
             </div>
 
-            {/* STREAK & CYCLE: UP AND DOWN ONLY */}
-            <motion.div 
-                animate={{ 
-                    y: [0, -20, 0],
-                }}
-                transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                className="absolute top-20 flex items-center gap-4 bg-white/5 border border-white/10 px-6 py-2 rounded-full backdrop-blur-xl z-40 shadow-2xl"
-            >
-                <div className="flex items-center gap-2">
-                    <Zap size={12} className="text-yellow-400 fill-yellow-400" />
-                    <span className="text-[9px] font-black uppercase tracking-[0.2em]">{streak} DAY STREAK</span>
-                </div>
-                <div className="w-px h-3 bg-white/20" />
-                <div className="flex items-center gap-2 text-blue-400">
-                    <Clock size={10} />
-                    <span className="text-[9px] font-black uppercase tracking-[0.2em]">CYCLE {cycle}/4</span>
-                </div>
-            </motion.div>
-
-            {/* FLOATING TASK SELECTOR */}
-            {!isZenMode && (
-                <motion.div 
-                    animate={{ y: [0, -10, 0] }}
-                    transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
-                    className="absolute top-40 w-full max-w-sm px-6 z-40"
-                >
-                    <div className="bg-white/5 border border-white/10 rounded-2xl p-4 backdrop-blur-md shadow-xl hover:border-blue-500/30 transition-all group">
-                        <div className="flex items-center justify-between mb-2">
-                            <span className="text-[8px] font-black uppercase tracking-[0.3em] opacity-30">Active Protocol</span>
-                            <BookOpen size={10} className="opacity-30" />
-                        </div>
-                        <select 
-                            value={currentTask}
-                            onChange={(e) => setCurrentTask(e.target.value)}
-                            className="w-full bg-transparent border-none outline-none font-black italic uppercase tracking-tighter text-sm appearance-none cursor-pointer"
-                        >
-                            <option value="General Focus" className="bg-[#0D0D0D]">General Focus</option>
-                            {journal.map((sub, i) => (
-                                <option key={i} value={sub.name} className="bg-[#0D0D0D]">{sub.name}</option>
-                            ))}
-                        </select>
-                    </div>
-                </motion.div>
-            )}
-
-            <main className="relative z-30 flex flex-col items-center">
-                <motion.div 
-                    key={timeLeft}
-                    className="text-[16rem] md:text-[22rem] font-black tracking-tighter tabular-nums leading-none select-none drop-shadow-[0_0_100px_rgba(255,255,255,0.05)] cursor-pointer hover:scale-[1.01] transition-transform"
-                    onClick={() => setIsZenMode(!isZenMode)}
-                >
-                    {formatTime(timeLeft)}
-                </motion.div>
-            </main>
-
-            {/* UNIFIED AMBIENT CONTROL BAR */}
+            {/* AI Insights */}
             <AnimatePresence>
-                {!isZenMode && (
-                    <motion.nav 
-                        initial={{ y: 100 }} animate={{ y: 0 }} exit={{ y: 100 }}
-                        className="fixed bottom-0 w-full p-8 flex justify-center z-50 bg-gradient-to-t from-black/60 to-transparent pointer-events-none"
-                    >
-                        <div className={`flex items-center gap-3 backdrop-blur-3xl border p-2 rounded-[2.5rem] shadow-2xl transition-colors pointer-events-auto ${
-                            theme === 'dark' ? 'bg-black/40 border-white/10' : 'bg-white/80 border-slate-200'
-                        }`}>
-                            <button onClick={() => onNavigate('dashboard')} className={`p-4 rounded-2xl border transition-all ${
-                                theme === 'dark' ? 'bg-white/5 hover:bg-white/10 border-white/5 text-white' : 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-900'
-                            }`} title="Return Home">
-                                <Home size={20} />
-                            </button>
-                            
-                            <div className={`flex gap-1 p-1 rounded-2xl border transition-colors ${
-                                theme === 'dark' ? 'bg-white/5 border-white/5' : 'bg-slate-100 border-slate-200'
-                            }`}>
-                                {(['work', 'short', 'long'] as const).map((m) => (
-                                    <button
-                                        key={m}
-                                        onClick={() => setMode(m)}
-                                        className={`px-6 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${
-                                            mode === m 
-                                                ? theme === 'dark' ? 'bg-white text-black' : 'bg-blue-600 text-white'
-                                                : theme === 'dark' ? 'text-white opacity-40 hover:opacity-100' : 'text-slate-600 hover:text-slate-900'
-                                        }`}
-                                    >
-                                        {m === 'work' ? 'Uplink' : m === 'short' ? 'Reboot' : 'Stasis'}
-                                    </button>
-                                ))}
-                            </div>
-
-                            <div className={`w-px h-8 mx-2 ${theme === 'dark' ? 'bg-white/10' : 'bg-slate-300'}`} />
-
-                            <div className="flex gap-2">
-                                <motion.button
-                                    whileHover={{ scale: 1.05 }}
-                                    whileTap={{ scale: 0.95 }}
-                                    onClick={toggleTimer}
-                                    className={`p-4 px-8 rounded-2xl font-black uppercase text-[10px] transition-all flex items-center gap-2 ${isActive ? 'bg-rose-600 text-white' : 'bg-blue-600 text-white'}`}
-                                >
-                                    {isActive ? <Pause size={16} /> : <Play size={16} />}
-                                    {isActive ? 'Suspend' : 'Engage'}
-                                </motion.button>
-                                <button onClick={resetTimer} className={`p-4 rounded-2xl border transition-all ${
-                                    theme === 'dark' ? 'bg-white/5 border-white/5 hover:bg-white/10 text-white' : 'bg-slate-100 border-slate-200 hover:bg-slate-200 text-slate-900'
-                                }`}>
-                                    <RefreshCw size={18} />
-                                </button>
-                            </div>
-
-                            <div className={`w-px h-8 mx-2 ${theme === 'dark' ? 'bg-white/10' : 'bg-slate-300'}`} />
-
-                            <div className="flex gap-2">
-                                <button onClick={() => setIsLiveMode(!isLiveMode)} className={`p-4 rounded-2xl border transition-all ${isLiveMode ? 'bg-indigo-600 border-indigo-400 text-white' : theme === 'dark' ? 'bg-white/5 border-white/5 text-gray-500' : 'bg-slate-100 border-slate-200 text-slate-400'}`}>
-                                    <Zap size={18} />
-                                </button>
-                                <button onClick={toggleAmbient} className={`p-4 rounded-2xl border transition-all ${showAmbient ? theme === 'dark' ? 'bg-white text-black' : 'bg-blue-600 text-white' : theme === 'dark' ? 'bg-white/5 border-white/5 hover:bg-white/10 text-white' : 'bg-slate-100 border-slate-200 hover:bg-slate-200 text-slate-900'}`}>
-                                    <Palette size={18} />
-                                </button>
-                                <button onClick={() => setWeather(weather === 'rain' ? 'snow' : weather === 'snow' ? 'none' : 'rain')} className={`p-4 rounded-2xl border transition-all ${theme === 'dark' ? 'bg-white/5 border-white/5 hover:bg-white/10 text-white' : 'bg-slate-100 border-slate-200 hover:bg-slate-200 text-slate-900'}`}>
-                                    {weather === 'rain' ? <CloudRain size={18} /> : weather === 'snow' ? <Snowflake size={18} /> : <Sun size={18} />}
-                                </button>
-                                <button onClick={toggleFullscreen} className={`p-4 rounded-2xl border transition-all ${theme === 'dark' ? 'bg-white/5 border-white/5 hover:bg-white/10 text-white' : 'bg-slate-100 border-slate-200 hover:bg-slate-200 text-slate-900'}`}>
-                                    {isFullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
-                                </button>
-                                <button onClick={toggleSettings} className={`p-4 rounded-2xl border transition-all ${showSettings ? theme === 'dark' ? 'bg-white text-black' : 'bg-blue-600 text-white' : theme === 'dark' ? 'bg-white/5 border-white/5 hover:bg-white/10 text-white' : 'bg-slate-100 border-slate-200 hover:bg-slate-200 text-slate-900'}`}>
-                                    <Settings size={18} />
-                                </button>
-                            </div>
-                        </div>
-                    </motion.nav>
-                )}
-            </AnimatePresence>
-
-            {/* SCENE CHOOSER PANEL */}
-            <AnimatePresence>
-                {showAmbient && (
-                    <motion.div 
-                        initial={{ x: 400 }} animate={{ x: 0 }} exit={{ x: 400 }}
-                        className={`fixed right-0 top-0 h-full w-[400px] backdrop-blur-[100px] border-l z-[100] p-10 pt-32 transition-colors ${
-                            theme === 'dark' ? 'bg-black/95 border-white/5 text-white' : 'bg-white/95 border-slate-200 text-slate-900 shadow-2xl'
-                        }`}
-                    >
-                        <div className="flex justify-between items-center mb-12">
-                            <h2 className="text-2xl font-black italic uppercase tracking-tighter">Scenes</h2>
-                            <X className="cursor-pointer opacity-20 hover:opacity-100" onClick={() => setShowAmbient(false)} />
-                        </div>
-                        <div className="space-y-4">
-                            {scenes.map((s, i) => (
-                                <button key={i} onClick={() => { setSceneIndex(i); setShowAmbient(false); }} className={`w-full p-6 rounded-[2rem] border flex items-center gap-5 transition-all ${sceneIndex === i ? 'border-blue-500 bg-blue-500/10' : theme === 'dark' ? 'border-white/5 bg-white/[0.02]' : 'border-slate-100 bg-slate-50 hover:bg-white'}`}>
-                                    <div className={`p-3 rounded-xl ${sceneIndex === i ? 'text-blue-400' : theme === 'dark' ? 'text-gray-600 bg-white/5' : 'text-slate-400 bg-slate-200'}`}><s.icon size={24} /></div>
-                                    <div className="text-left"><h3 className="font-black uppercase tracking-widest text-xs">{s.name}</h3></div>
-                                </button>
-                            ))}
-                        </div>
+                {aiInsight && (
+                    <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="fixed top-24 left-1/2 -translate-x-1/2 z-[60] px-5 py-2 bg-blue-600/20 backdrop-blur-xl border border-blue-500/30 rounded-full flex items-center gap-2">
+                        <Bot size={12} className="text-blue-400" />
+                        <span className="text-[8px] font-black uppercase tracking-widest text-blue-100">{aiInsight}</span>
                     </motion.div>
                 )}
             </AnimatePresence>
 
-            {/* SETTINGS MODAL */}
+            {/* MAIN TIMER */}
+            <main className="relative z-30 flex flex-col items-center justify-center py-4">
+                <motion.div key={timeLeft} initial={{ scale: 0.98, opacity: 0.9 }} animate={{ scale: 1, opacity: 1 }} className="text-[10rem] md:text-[14rem] font-black tracking-tighter tabular-nums leading-none drop-shadow-[0_0_60px_rgba(255,255,255,0.08)] select-none cursor-default">
+                    {formatTime(timeLeft)}
+                </motion.div>
+                <div className="px-6 py-2.5 bg-white/5 backdrop-blur-xl border border-white/10 rounded-full mt-2 flex items-center gap-4 shadow-2xl">
+                    <div className="flex flex-col items-center">
+                        <span className="text-[8px] font-black uppercase tracking-[0.6em] text-blue-400">{mode} ACTIVE</span>
+                        <div className="w-20 h-0.5 bg-blue-500/20 mt-1 rounded-full overflow-hidden">
+                            <motion.div className="h-full bg-blue-500" initial={{ width: 0 }} animate={{ width: `${(timeLeft / (settings[mode] * 60)) * 100}%` }} />
+                        </div>
+                    </div>
+                    {isActive && <motion.div animate={{ scale: [1, 1.4, 1], opacity: [0.5, 1, 0.5] }} transition={{ repeat: Infinity, duration: 2 }} className="w-1.5 h-1.5 bg-emerald-500 rounded-full shadow-[0_0_15px_#10b981]" />}
+                </div>
+            </main>
+
+            {/* BLUEPRINT */}
+            <div className="absolute right-8 bottom-24 z-50 flex flex-col items-end gap-3">
+                <button onClick={() => setShowBlueprint(!showBlueprint)} className={`p-4 rounded-2xl border transition-all flex items-center gap-3 shadow-2xl ${showBlueprint ? 'bg-emerald-600 border-white text-white' : 'bg-black/40 backdrop-blur-xl border-white/10 hover:bg-white/10 text-white/60 pointer-events-auto'}`}>
+                    <div className="flex flex-col items-end">
+                        <span className="text-[7px] font-black uppercase tracking-widest opacity-60 leading-none mb-0.5">Architecture</span>
+                        <span className="text-[10px] font-black uppercase tracking-tighter leading-none">{constructionTarget}</span>
+                    </div>
+                    <Bot size={20} />
+                </button>
+                <AnimatePresence>
+                    {showBlueprint && (
+                        <motion.div initial={{ x: 20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 20, opacity: 0 }} className="p-4 bg-black/90 backdrop-blur-2xl border border-white/10 rounded-[2rem] w-64 shadow-3xl grid grid-cols-2 gap-2 pointer-events-auto">
+                            {constructionOptions.map(opt => (
+                                <button key={opt.id} onClick={() => { setConstructionTarget(opt.id); setShowBlueprint(false); }} className={`p-3 rounded-xl border transition-all flex flex-col items-center gap-1.5 ${constructionTarget === opt.id ? 'bg-emerald-600 border-white text-white' : 'bg-white/5 border-white/5 text-white/40 hover:bg-white/10'}`}>
+                                    <opt.icon size={16} />
+                                    <span className="text-[7px] font-black uppercase tracking-widest">{opt.label}</span>
+                                </button>
+                            ))}
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+            </div>
+
+            {/* BOTTOM CONTROLS */}
+            <div className="fixed bottom-8 w-full flex justify-center z-50 px-8 pointer-events-none">
+                <div className={`flex items-center gap-4 backdrop-blur-3xl border p-3 rounded-[3rem] shadow-[0_20px_60px_rgba(0,0,0,0.4)] transition-all pointer-events-auto ${theme === 'dark' ? 'bg-black/60 border-white/10' : 'bg-white/90 border-slate-200'}`}>
+                    <div className={`flex gap-1 p-1 rounded-xl border ${theme === 'dark' ? 'bg-white/5 border-white/5' : 'bg-slate-100 border-slate-200'}`}>
+                        {(['work', 'short', 'long'] as const).map((m) => (
+                            <button key={m} onClick={() => setMode(m)} className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${mode === m ? 'bg-blue-600 text-white' : (theme === 'dark' ? 'text-white/40 hover:text-white' : 'text-slate-500 hover:text-slate-900')}`}>{m}</button>
+                        ))}
+                    </div>
+                    <div className="flex gap-2 mx-1">
+                        <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={toggleTimer} className={`px-10 py-3.5 rounded-[1.5rem] font-black uppercase text-[10px] tracking-widest transition-all flex items-center gap-3 ${isActive ? 'bg-rose-600 text-white' : 'bg-blue-600 text-white'}`}>
+                            {isActive ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
+                            {isActive ? 'Suspend' : 'Initialize'}
+                        </motion.button>
+                        <button onClick={resetTimer} className={`p-3.5 rounded-xl border transition-all group ${theme === 'dark' ? 'bg-white/5 border-white/10 text-white/40 hover:text-white' : 'bg-slate-100 border-slate-200 text-slate-400 hover:text-slate-900'}`}><RefreshCw size={18} className="group-hover:rotate-180 transition-transform duration-700" /></button>
+                    </div>
+                    <div className="flex gap-2">
+                        <button onClick={() => setShowAmbient(!showAmbient)} className={`p-3.5 rounded-xl border transition-all ${showAmbient ? 'bg-blue-600 text-white' : (theme === 'dark' ? 'bg-white/5 border-white/10 text-white/40' : 'bg-slate-100 border-slate-200 text-slate-400')}`}><Palette size={18} /></button>
+                        <button onClick={() => setShowConfig(!showConfig)} className={`p-3.5 rounded-xl border transition-all ${showConfig ? 'bg-blue-600 text-white' : (theme === 'dark' ? 'bg-white/5 border-white/10 text-white/40' : 'bg-slate-100 border-slate-200 text-slate-400')}`}><Settings size={18} /></button>
+                    </div>
+                </div>
+            </div>
+
+            {/* MODALS (Simplified) */}
             <AnimatePresence>
-                {showSettings && (
-                    <motion.div 
-                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} 
-                        className="fixed inset-0 bg-black/80 backdrop-blur-xl z-[150] flex items-center justify-center p-4"
-                    >
-                        <motion.div 
-                            initial={{ scale: 0.9 }} animate={{ scale: 1 }}
-                            className={`p-12 rounded-[4rem] w-full max-w-lg shadow-2xl transition-colors ${
-                                theme === 'dark' ? 'bg-[#0D0D0D] border border-white/10 text-white' : 'bg-white border border-slate-200 text-slate-900'
-                            }`}
-                        >
-                            <div className="flex justify-between items-center mb-12">
-                                <h3 className="text-2xl font-black italic uppercase">Config</h3>
-                                <X className="cursor-pointer opacity-20 hover:opacity-100" onClick={() => setShowSettings(false)} />
-                            </div>
-                            
-                            <div className="space-y-10">
-                                {(['work', 'short', 'long'] as const).map((key) => (
-                                    <div key={key}>
-                                        <label className="text-[10px] font-black uppercase opacity-40 mb-2 block">{key} duration</label>
-                                        <div className="flex items-center gap-6">
-                                            <input 
-                                                type="range" min="1" max="90" 
-                                                value={settings[key]} 
-                                                onChange={(e) => setSettings({ ...settings, [key]: Number(e.target.value) })}
-                                                className={`flex-1 ${theme === 'dark' ? 'accent-blue-600' : 'accent-blue-600'}`} 
-                                            />
-                                            <span className="w-12 font-black text-xl">{settings[key]}m</span>
+                {showSubjectSelector && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/95 backdrop-blur-3xl z-[100] flex items-center justify-center p-8">
+                        <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} className="max-w-4xl w-full p-12 rounded-[4rem] bg-[#0D0D0D] border border-white/10 text-white shadow-2xl relative">
+                            <X className="absolute top-8 right-8 cursor-pointer opacity-40 hover:opacity-100" size={32} onClick={() => setShowSubjectSelector(false)} />
+                            <h3 className="text-3xl font-black uppercase italic mb-8 tracking-tighter">Protocol Target</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-h-[60vh] overflow-y-auto pr-4 custom-scrollbar">
+                                {subjects.map((subject: any, i: number) => (
+                                    <div key={i} className="space-y-4">
+                                        <div className="flex items-center gap-3 p-3 bg-white/5 rounded-xl border border-white/10">
+                                            <BookOpen size={16} className="text-blue-500" />
+                                            <span className="font-black uppercase tracking-tighter text-sm">{subject.name}</span>
+                                        </div>
+                                        <div className="grid grid-cols-1 gap-1.5 pl-4 border-l border-white/5">
+                                            {subject.lessons?.map((lesson: any, j: number) => {
+                                                const name = typeof lesson === 'string' ? lesson : lesson.name;
+                                                return <button key={j} onClick={() => { setCurrentSubject(subject.name); setCurrentLesson(name); setShowSubjectSelector(false); }} className={`p-3 rounded-lg text-left text-[10px] font-black uppercase tracking-widest transition-all ${currentLesson === name && currentSubject === subject.name ? 'bg-blue-600 text-white' : 'bg-white/5 text-white/40 hover:bg-white/10'}`}>{name}</button>;
+                                            })}
                                         </div>
                                     </div>
                                 ))}
-
-                                <div className={`pt-6 border-t ${theme === 'dark' ? 'border-white/5' : 'border-slate-100'}`}>
-                                    <label className="text-[10px] font-black uppercase opacity-40 mb-4 block">End-of-Session Bell</label>
-                                    <div className="grid grid-cols-2 gap-3">
-                                        {bellSounds.map((s) => (
-                                            <button 
-                                                key={s.url}
-                                                onClick={() => {
-                                                    setBellSound(s.url);
-                                                    new Audio(s.url).play().catch(() => {});
-                                                }}
-                                                className={`p-4 rounded-xl text-[10px] font-black uppercase border transition-all ${bellSound === s.url ? 'bg-blue-600 border-blue-400 text-white' : theme === 'dark' ? 'bg-white/5 border-white/5 hover:bg-white/10 text-gray-400' : 'bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-600'}`}
-                                            >
-                                                {s.name}
-                                            </button>
-                                        ))}
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+                {showAmbient && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/95 backdrop-blur-3xl z-[100] flex items-center justify-center p-8">
+                        <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} className="max-w-4xl w-full p-12 rounded-[4rem] bg-[#0D0D0D] border border-white/10 text-white shadow-2xl relative">
+                            <X className="absolute top-8 right-8 cursor-pointer opacity-40 hover:opacity-100" size={32} onClick={() => setShowAmbient(false)} />
+                            <h3 className="text-3xl font-black uppercase italic mb-8 tracking-tighter">Calibration</h3>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                {scenes.map((s, i) => (
+                                    <button key={i} onClick={() => setSceneIndex(i)} className={`p-6 rounded-[2rem] border transition-all text-left relative overflow-hidden ${sceneIndex === i ? 'bg-blue-600 border-white scale-[1.02]' : 'bg-white/5 border-white/5'}`}>
+                                        <h4 className="text-xs font-black uppercase italic tracking-tighter relative z-10">{s.name}</h4>
+                                        <div className={`absolute inset-0 bg-gradient-to-br ${s.live} opacity-20`} />
+                                    </button>
+                                ))}
+                            </div>
+                            <div className="mt-8 pt-8 border-t border-white/5 grid grid-cols-2 gap-8">
+                                <div className="space-y-4">
+                                    <label className="text-[8px] font-black uppercase tracking-widest opacity-40">Weather</label>
+                                    <div className="flex gap-2">
+                                        {(['none', 'rain', 'snow'] as const).map(w => <button key={w} onClick={() => setWeather(w)} className={`flex-1 py-3 rounded-xl border text-[8px] font-black uppercase ${weather === w ? 'bg-blue-600 border-white' : 'bg-white/5 border-white/5 opacity-40'}`}>{w}</button>)}
                                     </div>
                                 </div>
+                                <div className="flex items-end"><button className="w-full py-4 bg-blue-600 rounded-xl font-black uppercase text-[10px] tracking-widest flex gap-2 items-center justify-center"><Volume2 size={16}/> Audio Uplink</button></div>
                             </div>
-                            
-                            <button onClick={() => { resetTimer(); setShowSettings(false); }} className={`w-full py-6 rounded-[2rem] font-black uppercase mt-12 transition-all shadow-xl ${
-                                theme === 'dark' ? 'bg-white text-black hover:bg-gray-200' : 'bg-slate-900 text-white hover:bg-black shadow-slate-900/20'
-                            }`}>Save & Reset Timer</button>
+                        </motion.div>
+                    </motion.div>
+                )}
+                {showConfig && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/95 backdrop-blur-3xl z-[100] flex items-center justify-center p-8">
+                        <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} className="max-w-md w-full p-12 rounded-[4rem] bg-[#0D0D0D] border border-white/10 text-white shadow-2xl relative">
+                            <X className="absolute top-8 right-8 cursor-pointer opacity-40 hover:opacity-100" size={32} onClick={() => setShowConfig(false)} />
+                            <h3 className="text-3xl font-black uppercase italic mb-10 tracking-tighter">Params</h3>
+                            <div className="space-y-8">
+                                {(['work', 'short', 'long'] as const).map((key) => (
+                                    <div key={key} className="space-y-2">
+                                        <div className="flex justify-between"><label className="text-[10px] font-black uppercase opacity-40">{key}</label><span className="font-black">{settings[key]}m</span></div>
+                                        <input type="range" min="1" max="90" value={settings[key]} onChange={(e) => setSettings({ ...settings, [key]: Number(e.target.value) })} className="w-full accent-blue-600" />
+                                    </div>
+                                ))}
+                            </div>
+                            <button onClick={() => { resetTimer(); setShowConfig(false); }} className="w-full py-6 bg-white text-black rounded-3xl font-black uppercase text-[10px] tracking-widest mt-10">Sync</button>
                         </motion.div>
                     </motion.div>
                 )}

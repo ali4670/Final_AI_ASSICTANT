@@ -89,15 +89,35 @@ const BrainParticles = () => {
 const MasteryScene: React.FC<{ masteryData: MasteryNode[] }> = ({ masteryData }) => {
     return (
         <>
-            <OrbitControls enablePan={false} autoRotate autoRotateSpeed={0.5} />
-            <ambientLight intensity={0.5} />
-            <pointLight position={[10, 10, 10]} intensity={1} />
+            <OrbitControls enablePan={false} autoRotate autoRotateSpeed={0.5} makeDefault />
+            <ambientLight intensity={0.4} />
+            <spotLight position={[10, 10, 10]} angle={0.15} penumbra={1} intensity={1} castShadow />
+            <pointLight position={[-10, -10, -10]} intensity={0.5} color="#4f46e5" />
             
             <BrainParticles />
             
-            {masteryData.map(node => (
-                <BrainNode key={node.id} node={node} />
-            ))}
+            {masteryData.length > 0 ? (
+                masteryData.map(node => (
+                    <BrainNode key={node.id} node={node} />
+                ))
+            ) : (
+                <Float speed={2} rotationIntensity={0.5} floatIntensity={0.5}>
+                    <Sphere args={[1, 32, 32]}>
+                        <MeshDistortMaterial 
+                            color="#312e81"
+                            speed={1}
+                            distort={0.4}
+                            wireframe
+                            opacity={0.2}
+                            transparent
+                        />
+                    </Sphere>
+                </Float>
+            )}
+
+            <Points positions={new Float32Array(500 * 3).map(() => (Math.random() - 0.5) * 50)} stride={3}>
+                <PointMaterial transparent color="#ffffff" size={0.05} sizeAttenuation opacity={0.1} />
+            </Points>
         </>
     );
 };
@@ -117,41 +137,47 @@ const MasteryMap: React.FC<{ onNavigate: (p: string) => void }> = ({ onNavigate 
         if (!supabase || !user) return;
         setLoading(true);
         try {
-            // Fetch study sessions with scores
-            const { data: sessions, error } = await supabase
-                .from('study_sessions')
-                .select('content_id, score')
-                .eq('user_id', user.id)
-                .not('score', 'is', null);
-            
-            if (error) throw error;
-
-            // Fetch document titles
+            // Fetch document titles first to have labels
             const { data: docs } = await supabase.from('documents').select('id, title');
             const docMap: Record<string, string> = {};
             docs?.forEach(d => docMap[d.id] = d.title);
 
-            // Aggregate scores
-            const aggregated: Record<string, { total: number, count: number }> = {};
-            sessions?.forEach(s => {
-                if (!s.content_id) return;
-                if (!aggregated[s.content_id]) aggregated[s.content_id] = { total: 0, count: 0 };
-                aggregated[s.content_id].total += s.score || 0;
-                aggregated[s.content_id].count += 1;
-            });
+            // Fetch quiz results/sessions with scores
+            // Note: If study_sessions doesn't have score/content_id yet, we use mock or empty
+            const { data: sessions, error } = await supabase
+                .from('study_sessions')
+                .select('*')
+                .eq('user_id', user.id);
+            
+            if (error) console.warn("Sessions fetch error:", error);
 
-            const nodes: MasteryNode[] = Object.keys(aggregated).map((id, i) => {
+            // Filter for sessions that have a score (or simulated score)
+            // If no sessions, we show an empty state in 3D
+            const aggregated: Record<string, { total: number, count: number }> = {};
+            
+            if (sessions && sessions.length > 0) {
+                sessions.forEach(s => {
+                    const cid = (s as any).content_id || (s as any).document_id;
+                    const score = (s as any).score || 0;
+                    if (!cid) return;
+                    if (!aggregated[cid]) aggregated[cid] = { total: 0, count: 0 };
+                    aggregated[cid].total += score;
+                    aggregated[cid].count += 1;
+                });
+            }
+
+            const nodeKeys = Object.keys(aggregated);
+            const nodes: MasteryNode[] = nodeKeys.map((id, i) => {
                 const avg = aggregated[id].total / aggregated[id].count;
-                // Position nodes inside the "brain"
-                const angle = (i / Object.keys(aggregated).length) * Math.PI * 2;
-                const radius = 2 + Math.random() * 2;
+                const angle = (i / nodeKeys.length) * Math.PI * 2;
+                const radius = 2 + Math.random() * 1.5;
                 return {
                     id,
                     title: docMap[id] || 'Fragment',
                     score: avg,
                     pos: new THREE.Vector3(
                         Math.cos(angle) * radius,
-                        (Math.random() - 0.5) * 4,
+                        (Math.random() - 0.5) * 3,
                         Math.sin(angle) * radius
                     )
                 };
@@ -166,9 +192,11 @@ const MasteryMap: React.FC<{ onNavigate: (p: string) => void }> = ({ onNavigate 
                     high: Math.max(...scores),
                     low: Math.min(...scores)
                 });
+            } else {
+                setStats({ average: 0, high: 0, low: 0 });
             }
         } catch (err) {
-            console.error(err);
+            console.error("Mastery Fetch Error:", err);
         } finally {
             setLoading(false);
         }

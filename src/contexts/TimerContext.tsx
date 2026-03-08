@@ -1,23 +1,31 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useAuth } from './AuthContext';
+import { supabase } from '../lib/supabase';
+import { useTheme } from './ThemeContext';
 
-type TimerMode = 'work' | 'short' | 'long';
+export type ConstructionType = 'tree' | 'house' | 'barn' | 'windmill' | 'sheep' | 'robot' | 'fountain' | 'monolith' | 'bush' | 'fence';
 
 interface TimerContextType {
     timeLeft: number;
     isActive: boolean;
-    mode: TimerMode;
+    mode: 'work' | 'short' | 'long';
     cycle: number;
     streak: number;
     settings: { work: number; short: number; long: number };
     currentTask: string;
+    currentSubject: string;
+    currentLesson: string;
     bellSound: string;
     growthPoints: number;
+    constructionTarget: ConstructionType;
+    setConstructionTarget: (target: ConstructionType) => void;
     toggleTimer: () => void;
     resetTimer: () => void;
-    setMode: (mode: TimerMode) => void;
+    setMode: (mode: 'work' | 'short' | 'long') => void;
     setSettings: (settings: { work: number; short: number; long: number }) => void;
     setCurrentTask: (task: string) => void;
+    setCurrentSubject: (subject: string) => void;
+    setCurrentLesson: (lesson: string) => void;
     setBellSound: (sound: string) => void;
     incrementGrowth: (points: number) => Promise<void>;
 }
@@ -26,34 +34,32 @@ const TimerContext = createContext<TimerContextType | undefined>(undefined);
 
 export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { user } = useAuth();
+    const { soundVolume } = useTheme();
     const [settings, setSettings] = useState({ work: 25, short: 5, long: 15 });
     const [timeLeft, setTimeLeft] = useState(settings.work * 60);
     const [isActive, setIsActive] = useState(false);
-    const [mode, setMode] = useState<TimerMode>('work');
+    const [mode, setMode] = useState<'work' | 'short' | 'long'>('work');
     const [cycle, setCycle] = useState(1);
     const [streak, setStreak] = useState(0);
     const [currentTask, setCurrentTask] = useState('General Focus');
+    const [currentSubject, setCurrentSubject] = useState('Uncategorized');
+    const [currentLesson, setCurrentLesson] = useState('General');
     const [bellSound, setBellSound] = useState('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
     const [growthPoints, setGrowthPoints] = useState(0);
+    const [constructionTarget, setConstructionTarget] = useState<ConstructionType>('tree');
 
-    // Request notification permission
     useEffect(() => {
-        if ("Notification" in window && Notification.permission === "default") {
-            Notification.requestPermission();
-        }
-        if (user) {
-            fetchGrowthPoints();
-        }
+        if (user) fetchGrowthPoints();
     }, [user]);
 
     const fetchGrowthPoints = async () => {
-        if (!user || !supabase) return;
+        if (!user) return;
         const { data } = await supabase.from('profiles').select('focus_growth_points').eq('id', user.id).single();
         if (data) setGrowthPoints(data.focus_growth_points || 0);
     };
 
     const incrementGrowth = async (points: number) => {
-        if (!user || !supabase) return;
+        if (!user) return;
         const newTotal = growthPoints + points;
         setGrowthPoints(newTotal);
         try {
@@ -61,27 +67,53 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         } catch (e) { console.error(e); }
     };
 
-    const awardStar = async () => {
+    const logSession = async () => {
         if (!user) return;
         try {
-            await fetch('/api/award-star', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userId: user.id })
+            // 1. Log session to database
+            await supabase.from('study_sessions').insert({
+                user_id: user.id,
+                subject: currentSubject,
+                lesson: currentLesson,
+                duration_minutes: settings.work
             });
-        } catch (e) { console.error("Failed to award star", e); }
-    };
 
-    const sendNotification = (title: string, body: string) => {
-        if ("Notification" in window && Notification.permission === "granted") {
-            new Notification(title, {
-                body,
-                icon: "/favicon.ico"
-            });
+            // 2. Add XP (e.g., 20 XP per session)
+            await supabase.rpc('add_xp', { user_id: user.id, xp_to_add: 20 });
+
+            // 3. Update Streak
+            await supabase.rpc('update_streak', { user_id: user.id });
+        } catch (e) {
+            console.error("Failed to log session:", e);
         }
     };
 
-    const switchMode = useCallback((newMode: TimerMode) => {
+    const awardStar = async () => {
+        if (!user) return;
+        try {
+            await incrementGrowth(10);
+            
+            // --- ORGANIZED GRID PLACEMENT ---
+            const snap = 5;
+            const x = Math.round(((Math.random() - 0.5) * 80) / snap) * snap;
+            const z = Math.round(((Math.random() - 0.5) * 80) / snap) * snap;
+
+            const newItem = {
+                user_id: user.id,
+                item_type: constructionTarget,
+                position: { x, y: 0, z },
+                scale: 1,
+                rotation: Math.random() * Math.PI * 2
+            };
+            
+            await supabase.from('garden_items').insert(newItem);
+            
+            // Log the completed work session
+            await logSession();
+        } catch (e) { console.error(e); }
+    };
+
+    const switchMode = useCallback((newMode: 'work' | 'short' | 'long') => {
         setMode(newMode);
         setTimeLeft(settings[newMode] * 60);
         setIsActive(false);
@@ -93,44 +125,36 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             interval = setInterval(() => setTimeLeft(prev => prev - 1), 1000);
         } else if (timeLeft === 0 && isActive) {
             setIsActive(false);
-            
-            // Play chosen bell sound
-            new Audio(bellSound).play().catch(() => {});
-
+            const bell = new Audio(bellSound);
+            bell.volume = soundVolume;
+            bell.play().catch(() => {});
             if (mode === 'work') {
-                const nextMode = (cycle % 4 === 0) ? 'long' : 'short';
-                sendNotification("Focus Session Complete!", `Time for a ${nextMode === 'long' ? 'Long Break' : 'Short Break'}.`);
-                awardStar(); // AWARD THE STAR HERE
-                incrementGrowth(10); // ADD GROWTH POINTS
+                awardStar();
                 setStreak(prev => prev + 1);
-                switchMode(nextMode);
+                switchMode((cycle % 4 === 0) ? 'long' : 'short');
             } else {
-                sendNotification("Break Over!", "Ready to dive back into focus?");
                 setCycle(prev => prev + 1);
                 switchMode('work');
             }
         }
         return () => clearInterval(interval);
-    }, [isActive, timeLeft, mode, cycle, switchMode, bellSound, user, growthPoints]);
-
-    const toggleTimer = () => setIsActive(!isActive);
-    const resetTimer = () => {
-        setIsActive(false);
-        setTimeLeft(settings[mode] * 60);
-    };
+    }, [isActive, timeLeft, mode, cycle, switchMode, bellSound, soundVolume]);
 
     return (
         <TimerContext.Provider value={{
-            timeLeft, isActive, mode, cycle, streak, settings, currentTask, bellSound, growthPoints,
-            toggleTimer, resetTimer, setMode: switchMode, setSettings, setCurrentTask, setBellSound, incrementGrowth
+            timeLeft, isActive, mode, cycle, streak, settings, currentTask, currentSubject, currentLesson, bellSound, growthPoints,
+            constructionTarget, setConstructionTarget,
+            toggleTimer: () => setIsActive(!isActive), resetTimer: () => { setIsActive(false); setTimeLeft(settings[mode] * 60); },
+            setMode: switchMode, setSettings, setCurrentTask, setCurrentSubject, setCurrentLesson, setBellSound, incrementGrowth
         }}>
             {children}
         </TimerContext.Provider>
     );
 };
 
+
 export const useTimer = () => {
     const context = useContext(TimerContext);
-    if (!context) throw new Error('useTimer must be used within TimerProvider');
+    if (!context) throw new Error('useTimer error');
     return context;
 };

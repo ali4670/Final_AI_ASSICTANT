@@ -3,24 +3,17 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { TimerProvider } from './contexts/TimerContext';
-import Login from './components/Login';
-import Signup from './components/Signup';
+import { ArrowUp } from 'lucide-react';
 
-import Hero from './components/Hero';
-import Dashboard from './components/Dashboard';
-import Documents from './components/Documents';
-import Chat from './components/Chat';
-import Flashcards from './components/Flashcards';
-import Quizzes from './components/Quizzes';
-import About from "./Pages/About";
+// Pages
+import Home from './Pages/Home';
+import About from './Pages/About';
 import StudyTimeline from './Pages/StudyTimeline';
 import StudyPath from './Pages/StudyPath';
 import Pomodoro from './Pages/Pomodoro';
 import Calendar from './Pages/Calendar';
 import Support from './Pages/Support';
-import Settings from './Pages/Settings';
 import Resume from './Pages/Resume';
-import Journal from './Pages/Journal';
 import Leaderboard from './Pages/Leaderboard';
 import Admin from './Pages/Admin';
 import Presentation from './Pages/Presentation';
@@ -28,10 +21,33 @@ import KnowledgeGraph from './Pages/KnowledgeGraph';
 import MasteryMap from './Pages/MasteryMap';
 import Trees from './Pages/Trees';
 import Vision from './Pages/Vision';
+import SocialHub from './Pages/Social';
+import Messenger from './Pages/Messenger';
+import Profile from './Pages/Profile';
+import AIPlanner from './Pages/AIPlanner';
+import SummaryHub from './Pages/SummaryHub';
+import WriteSummary from './Pages/WriteSummary';
+import Reader from './Pages/Reader';
+import Themes from './Pages/Themes';
+import Marketplace from './Pages/Marketplace';
+import SkillTree from './Pages/SkillTree';
+
+// Components
+import Dashboard from './components/Dashboard';
+import Documents from './components/Documents';
+import Chat from './components/Chat';
+import Flashcards from './components/Flashcards';
+import Quizzes from './components/Quizzes';
+import PublicDocs from './components/PublicDocs';
 import Navbar from './components/Nave';
 import PomodoroTimer from './components/PomodoroTimer';
 import AppBackground from './components/AppBackground';
-import { ArrowUp } from 'lucide-react';
+import WeatherEffects from './components/WeatherEffects';
+import NeuralSummary from './components/NeuralSummary';
+import GuestRestrictionModal from './components/GuestRestrictionModal';
+import Login from './components/Login';
+import Signup from './components/Signup';
+import ErrorBoundary from './components/ErrorBoundary';
 
 export type Page =
     | 'home'
@@ -46,23 +62,35 @@ export type Page =
     | 'pomodoro'
     | 'calendar'
     | 'support'
-    | 'settings'
     | 'neuralSummary'
-    | 'journal'
     | 'leaderboard'
     | 'admin'
+    | 'vision'
+    | 'public-docs'
+    | 'social'
+    | 'messenger'
+    | 'profile'
+    | 'ai-planner'
+    | 'themes'
+    | 'marketplace'
+    | 'skill-tree'
+    | 'summaryHub'
+    | 'writeSummary'
+    | 'reader'
     | 'resume'
     | 'presentation'
     | 'knowledgeGraph'
     | 'masteryMap'
     | 'trees'
-    | 'vision'
+    | 'login'
+    | 'signup'
     ;
 
 function ScrollToTop() {
     const [visible, setVisible] = useState(false);
-    const { theme } = useTheme();
-    
+    // Remove useTheme for now to check if it's the cause of the crash
+    // const { theme } = useTheme();
+
     useEffect(() => {
         const toggleVisible = () => {
             if (window.scrollY > 300) setVisible(true);
@@ -80,11 +108,7 @@ function ScrollToTop() {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.5 }}
             onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-            className={`fixed bottom-24 right-6 z-[1000] p-4 backdrop-blur-xl border rounded-2xl shadow-2xl transition-all ${
-                theme === 'dark' 
-                ? 'bg-white/10 border-white/20 text-white hover:bg-white/20' 
-                : 'bg-blue-600 border-blue-500 text-white hover:bg-blue-700'
-            }`}
+            className="fixed bottom-24 right-6 z-[1000] p-4 backdrop-blur-xl border rounded-2xl shadow-2xl transition-all bg-blue-600 border-blue-500 text-white hover:bg-blue-700"
         >
             <ArrowUp size={20} />
         </motion.button>
@@ -92,69 +116,71 @@ function ScrollToTop() {
 }
 
 function AppContent() {
-    const { user, loading, isGuest } = useAuth();
-    const { theme } = useTheme();
-    const [isLogin, setIsLogin] = useState(true);
+    const auth = useAuth();
+    const user = auth?.user;
+    const loading = auth?.loading;
+    const isGuest = auth?.isGuest;
+    
+    const themeCtx = useTheme();
+    const theme = themeCtx?.theme || 'dark';
+    const experienceTheme = themeCtx?.experienceTheme || 'none';
+
     const [currentPage, setCurrentPage] = useState<Page>('home');
     const [selectedDocumentId, setSelectedDocumentId] = useState<string | undefined>();
+    const [selectedFriendId, setSelectedFriendId] = useState<string | undefined>();
     const [isNavVisible, setIsNavVisible] = useState(true);
     const [showGuestModal, setShowGuestModal] = useState(false);
 
-    const handleNavigate = (page: string, documentId?: string) => {
-        // Guest restrictions
-        const restrictedPages = ['documents', 'flashcards', 'quizzes', 'neuralSummary', 'journal', 'leaderboard', 'settings', 'admin'];
+    const handleNavigate = (page: string, id?: string) => {
+        const restrictedPages = ['documents', 'flashcards', 'quizzes', 'neuralSummary', 'leaderboard', 'admin', 'public-docs', 'dashboard', 'social', 'messenger'];
         if (isGuest && restrictedPages.includes(page)) {
             setShowGuestModal(true);
             return;
         }
 
+        if (!user && restrictedPages.includes(page)) {
+            setCurrentPage('login');
+            return;
+        }
+
+        if (page === 'messenger') {
+            setSelectedFriendId(id);
+        } else {
+            setSelectedDocumentId(id);
+        }
+
         setCurrentPage(page as Page);
-        setSelectedDocumentId(documentId);
         window.scrollTo(0, 0);
     };
 
+    useEffect(() => {
+        setIsNavVisible(!['login', 'signup', 'pomodoro'].includes(currentPage));
+    }, [currentPage]);
+
+    // Ensure user is redirected to home/login on sign out
+    useEffect(() => {
+        if (!user && currentPage !== 'login' && currentPage !== 'signup' && currentPage !== 'home') {
+            setCurrentPage('home');
+        }
+    }, [user, currentPage]);
+
     if (loading) {
         return (
-            <div className={`min-h-screen flex items-center justify-center transition-colors duration-700 ${
-                theme === 'dark' ? 'bg-[#050505]' : 'bg-blue-50'
-            }`}>
-                <div className={`animate-spin rounded-full h-16 w-16 border-b-2 ${
-                    theme === 'dark' ? 'border-blue-500' : 'border-blue-600'
-                }`}></div>
-            </div>
-        );
-    }
-
-    if (!user) {
-        return (
-            <div className={`transition-colors duration-700 ${theme === 'dark' ? 'dark bg-[#050505]' : 'bg-white'}`}>
-                {isLogin ? (
-                    <Login onToggleMode={() => setIsLogin(false)} />
-                ) : (
-                    <Signup onToggleMode={() => setIsLogin(true)} />
-                )}
+            <div className="min-h-screen bg-[#050505] flex flex-col items-center justify-center gap-6">
+                <div className="w-20 h-20 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin" />
+                <p className="text-[10px] font-black text-white uppercase tracking-[0.8em] animate-pulse">Initializing Neural Core</p>
             </div>
         );
     }
 
     return (
         <div className={`transition-colors duration-700 min-h-screen relative ${theme === 'dark' ? 'dark' : ''}`}>
-            <AppBackground />
-            <Navbar onNavigate={handleNavigate} onVisibilityChange={setIsNavVisible} />
-            <GuestRestrictionModal 
-                isOpen={showGuestModal} 
-                onClose={() => setShowGuestModal(false)} 
-                onNavigate={handleNavigate} 
-            />
-            <div className="relative z-[1000]">
-                <PomodoroTimer onNavigate={handleNavigate} />
-                <ScrollToTop />
-            </div>
-            <motion.div
-                animate={{ paddingTop: isNavVisible ? '80px' : '0px' }}
-                transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-                className="relative z-10"
-            >
+            <AppBackground theme={experienceTheme} />
+            <WeatherEffects type={experienceTheme} />
+            
+            {user && isNavVisible && <Navbar onNavigate={handleNavigate} currentPage={currentPage} />}
+
+            <main className={`relative z-10 ${user && isNavVisible ? 'pt-32 md:pt-36' : ''}`}>
                 <AnimatePresence mode="wait">
                     <motion.div
                         key={currentPage}
@@ -163,89 +189,75 @@ function AppContent() {
                         exit={{ opacity: 0, y: -10 }}
                         transition={{ duration: 0.3 }}
                     >
-                        {(() => {
-                            switch (currentPage) {
-                                case 'home':
-                                    return <Hero onNavigate={handleNavigate} />;
-
-                                case 'dashboard':
-                                    return <Dashboard onNavigate={handleNavigate} />;
-
-                                case 'studyTimeline':
-                                    return <StudyTimeline onNavigate={handleNavigate} />;
-
-                                case 'about':
-                                    return <About onNavigate={handleNavigate}/>;
-
-                                case 'documents':
-                                    return <Documents onNavigate={handleNavigate} />;
-
-                                case 'chat':
-                                    return <Chat onNavigate={handleNavigate} documentId={selectedDocumentId} />;
-
-                                case 'flashcards':
-                                    return <Flashcards onNavigate={handleNavigate} documentId={selectedDocumentId} />;
-
-                                case 'quizzes':
-                                    return <Quizzes onNavigate={handleNavigate} documentId={selectedDocumentId} />;
-
-                                case 'studyPath':
-                                    return <StudyPath onNavigate={handleNavigate} />;
-
-                                case 'pomodoro':
-                                    return <Pomodoro onNavigate={handleNavigate} />;
-
-                                case 'calendar':
-                                    return <Calendar onNavigate={handleNavigate} />;
-                                
-                                case 'support':
-                                    return <Support onNavigate={handleNavigate} />;
-
-                                case 'settings':
-                                    return <Settings onNavigate={handleNavigate} />;
-
-                                case 'journal':
-                                    return <Journal onNavigate={handleNavigate} />;
-
-                                case 'leaderboard':
-                                    return <Leaderboard onNavigate={handleNavigate} />;
-
-                                case 'admin':
-                                    return <Admin onNavigate={handleNavigate} />;
-
-                                case 'presentation':
-                                    return <Presentation />;
-
-                                case 'knowledgeGraph':
-                                    return <KnowledgeGraph onNavigate={handleNavigate} />;
-
-                                case 'masteryMap':
-                                    return <MasteryMap onNavigate={handleNavigate} />;
-
-                                case 'trees':
-                                    return <Trees onNavigate={handleNavigate} />;
-
-                                case 'vision':
-                                    return <Vision onNavigate={handleNavigate} />;
-
-                                case 'resume':
-                                    return <Resume onNavigate={handleNavigate} />;
-
-                                case 'neuralSummary':
-                                    return <NeuralSummary onNavigate={handleNavigate} documentId={selectedDocumentId} />;
-
-                                default:
-                                    return <Dashboard onNavigate={handleNavigate} />;
-                            }
-                        })()}
+                        {!user ? (
+                            (() => {
+                                switch (currentPage) {
+                                    case 'login': return <Login onToggleMode={() => setCurrentPage('signup')} />;
+                                    case 'signup': return <Signup onToggleMode={() => setCurrentPage('login')} />;
+                                    case 'home':
+                                    default: return <Home onNavigate={handleNavigate} />;
+                                }
+                            })()
+                        ) : (
+                            (() => {
+                                switch (currentPage) {
+                                    case 'dashboard': return (
+                                        <ErrorBoundary>
+                                            <Dashboard onNavigate={handleNavigate} />
+                                        </ErrorBoundary>
+                                    );
+                                    case 'documents': return <Documents onNavigate={handleNavigate} />;
+                                    case 'chat': return <Chat onNavigate={handleNavigate} documentId={selectedDocumentId} />;
+                                    case 'flashcards': return <Flashcards onNavigate={handleNavigate} documentId={selectedDocumentId} />;
+                                    case 'quizzes': return <Quizzes onNavigate={handleNavigate} documentId={selectedDocumentId} />;
+                                    case 'public-docs': return <PublicDocs onNavigate={handleNavigate} />;
+                                    case 'social': return <SocialHub onNavigate={handleNavigate} />;
+                                    case 'messenger': return <Messenger onNavigate={handleNavigate} friendId={selectedFriendId!} />;
+                                    case 'profile': return <Profile onNavigate={handleNavigate} />;
+                                    case 'ai-planner': return <AIPlanner onNavigate={handleNavigate} />;
+                                    case 'themes': return <Themes onNavigate={handleNavigate} />;
+                                    case 'marketplace': return <Marketplace onNavigate={handleNavigate} />;
+                                    case 'skill-tree': return <SkillTree onNavigate={handleNavigate} />;
+                                    case 'summaryHub': return <SummaryHub onNavigate={handleNavigate} />;
+                                    case 'writeSummary': return <WriteSummary onNavigate={handleNavigate} documentId={selectedDocumentId} />;
+                                    case 'reader': return <Reader onNavigate={handleNavigate} documentId={selectedDocumentId} />;
+                                    case 'resume': return <Resume onNavigate={handleNavigate} />;
+                                    case 'neuralSummary': return <NeuralSummary onNavigate={handleNavigate} documentId={selectedDocumentId} />;
+                                    case 'leaderboard': return <Leaderboard onNavigate={handleNavigate} />;
+                                    case 'studyTimeline': return <StudyTimeline onNavigate={handleNavigate} />;
+                                    case 'studyPath': return <StudyPath onNavigate={handleNavigate} />;
+                                    case 'pomodoro': return <Pomodoro onNavigate={handleNavigate} />;
+                                    case 'calendar': return <Calendar onNavigate={handleNavigate} />;
+                                    case 'support': return <Support onNavigate={handleNavigate} />;
+                                    case 'admin': return <Admin onNavigate={handleNavigate} />;
+                                    case 'vision': return <Vision onNavigate={handleNavigate} />;
+                                    case 'knowledgeGraph': return <KnowledgeGraph onNavigate={handleNavigate} />;
+                                    case 'masteryMap': return <MasteryMap onNavigate={handleNavigate} />;
+                                    case 'trees': return <Trees onNavigate={handleNavigate} />;
+                                    case 'presentation': return <Presentation onNavigate={handleNavigate} />;
+                                    default: return (
+                                        <ErrorBoundary>
+                                            <Dashboard onNavigate={handleNavigate} />
+                                        </ErrorBoundary>
+                                    );
+                                }
+                            })()
+                        )}
                     </motion.div>
                 </AnimatePresence>
-            </motion.div>
+            </main>
+
+            {showGuestModal && <GuestRestrictionModal onClose={() => setShowGuestModal(false)} />}
+
+            <div className="relative z-[1000]">
+                <PomodoroTimer onNavigate={handleNavigate} />
+                <ScrollToTop />
+            </div>
         </div>
     );
 }
 
-function App() {
+export default function App() {
     return (
         <AuthProvider>
             <ThemeProvider>
@@ -256,7 +268,3 @@ function App() {
         </AuthProvider>
     );
 }
-
-import NeuralSummary from './components/NeuralSummary';
-import GuestRestrictionModal from './components/GuestRestrictionModal';
-export default App;

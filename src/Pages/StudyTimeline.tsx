@@ -299,7 +299,7 @@ export default function StudyTimeline({ onNavigate }: Props) {
     );
 
     return (
-        <div className={`min-h-screen relative z-10 pt-24 p-8 transition-colors duration-700 ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+        <div className={`min-h-screen relative z-10 pt-12 p-8 transition-colors duration-700 ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
             <div className="max-w-7xl mx-auto">
                 {/* Toasts */}
                 <AnimatePresence>

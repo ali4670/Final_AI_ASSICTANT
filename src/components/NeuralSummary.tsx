@@ -22,8 +22,7 @@ import {
     Printer,
     Plus
 } from 'lucide-react';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
+import { generateNeuralPDF } from '../lib/pdfGenerator';
 
 interface NeuralSummaryProps {
     onNavigate: (page: string, id?: string) => void;
@@ -196,46 +195,17 @@ const NeuralSummary: React.FC<NeuralSummaryProps> = ({ onNavigate, documentId })
     };
 
     const downloadPDF = async () => {
-        if (!printRef.current || isExporting) return;
+        if (!printRef.current || isExporting || !summary) return;
         
         setIsExporting(true);
         try {
-            const element = printRef.current;
-            element.style.display = 'block';
-            
-            // Wait for images/fonts if any
-            await new Promise(r => setTimeout(r, 500));
-
-            const canvas = await html2canvas(element, { 
-                scale: 1.5, // Reduced scale to prevent memory errors
-                useCORS: true,
-                logging: false,
-                backgroundColor: '#ffffff',
-                windowWidth: 800
+            await generateNeuralPDF(printRef.current, {
+                title: summary.title,
+                subtitle: 'NEURAL SUMMARY REPORT',
+                userName: user?.email || 'GUEST_EXPLORER',
+                theme: theme,
+                fileName: summary.title.replace(/\s+/g, '_')
             });
-            
-            const imgData = canvas.toDataURL('image/jpeg', 0.85); // Use JPEG for smaller size
-            const pdf = new jsPDF('p', 'mm', 'a4');
-            const pageWidth = pdf.internal.pageSize.getWidth();
-            const pageHeight = pdf.internal.pageSize.getHeight();
-            const imgWidth = pageWidth;
-            const imgHeight = (canvas.height * imgWidth) / canvas.width;
-            
-            let heightLeft = imgHeight;
-            let position = 0;
-
-            pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
-            heightLeft -= pageHeight;
-
-            while (heightLeft >= 0) {
-                position = heightLeft - imgHeight;
-                pdf.addPage();
-                pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
-                heightLeft -= pageHeight;
-            }
-
-            pdf.save(`${summary?.title.replace(/\s+/g, '_')}_Report.pdf`);
-            element.style.display = 'none';
         } catch (err) {
             console.error("PDF Export Error:", err);
             alert("Export protocol failed. Please try a smaller batch or different browser.");
@@ -472,80 +442,82 @@ const NeuralSummary: React.FC<NeuralSummaryProps> = ({ onNavigate, documentId })
                                 </AnimatePresence>
                                 </div>
 
-                                {/* --- PRINT TEMPLATE --- */}
-                                <div style={{ position: 'absolute', top: '-9999px', left: '-9999px' }}>
-                                <div ref={printRef} className="p-20 bg-white text-slate-900" style={{ width: '1000px', fontFamily: 'serif' }}>
-                                <div className="border-b-[12px] border-slate-950 pb-12 mb-20">
-                                <div className="flex justify-between items-end mb-8">
-                                <h1 className="text-6xl font-black uppercase tracking-tighter leading-none">Neural <br/> Intelligence <br/> Report</h1>
-                                <div className="text-right">
-                                    <p className="text-[10px] font-black uppercase tracking-[0.4em] opacity-40 mb-2">Protocol Reference</p>
-                                    <p className="text-2xl font-black italic uppercase tracking-tighter">{summary?.title}</p>
-                                </div>
-                                </div>
-                                <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-[0.5em] opacity-30">
-                                <span>Core Analysis v2.4</span>
-                                <span>Captured: {new Date().toLocaleString()}</span>
-                                </div>
-                                </div>
+            {/* --- PREMIUM PRINT TEMPLATE --- */}
+            <div style={{ position: 'absolute', top: '-9999px', left: '-9999px' }}>
+                <div ref={printRef} className="p-16 bg-white text-slate-900" style={{ width: '850px' }}>
+                    <div className="mb-16 border-b-[8px] border-slate-900 pb-12">
+                        <div className="flex justify-between items-end mb-8">
+                            <div>
+                                <h1 className="text-5xl font-black italic uppercase tracking-tighter leading-none mb-2 text-slate-950">NEURAL<br/>INTELLIGENCE</h1>
+                                <p className="text-[10px] font-black uppercase tracking-[0.5em] text-amber-600">Cognitive Synthesis Report</p>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-[8px] font-black uppercase tracking-[0.3em] opacity-30 mb-1">REFERENCE</p>
+                                <p className="text-xl font-black italic uppercase tracking-tighter">{summary?.title}</p>
+                            </div>
+                        </div>
+                    </div>
 
-                                <section className="mb-24">
-                                <h2 className="text-4xl font-black uppercase italic tracking-tighter mb-10 border-b-2 border-slate-100 pb-4 flex items-center gap-4">
-                                <span className="w-10 h-10 bg-amber-500 rounded-xl flex items-center justify-center text-white text-lg font-black italic">I</span> 
-                                Academic Synthesis
-                                </h2>
-                                <div className="text-2xl leading-relaxed whitespace-pre-wrap pl-10 border-l-8 border-amber-50 text-slate-700">{summary?.summary}</div>
-                                </section>
+                    <section className="mb-16" style={{ breakInside: 'avoid' }}>
+                        <div className="flex items-center gap-4 mb-8">
+                            <div className="w-12 h-12 bg-amber-500 rounded-lg flex items-center justify-center text-white text-xl font-black">I</div>
+                            <h2 className="text-3xl font-black uppercase italic tracking-tighter border-b-2 border-slate-100 flex-1 pb-2">Academic Synthesis</h2>
+                        </div>
+                        <div className="text-lg leading-relaxed font-medium whitespace-pre-wrap pl-8 border-l-4 border-amber-100 text-slate-800">
+                            {summary?.summary}
+                        </div>
+                    </section>
 
-                                <div style={{ pageBreakAfter: 'always' }} />
+                    <section className="mb-16" style={{ breakInside: 'avoid' }}>
+                        <div className="flex items-center gap-4 mb-10">
+                            <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center text-white text-xl font-black">II</div>
+                            <h2 className="text-3xl font-black uppercase italic tracking-tighter border-b-2 border-slate-100 flex-1 pb-2">Recall Validation</h2>
+                        </div>
+                        <div className="space-y-8 pl-8">
+                            {summary?.quiz?.map((q: any, i: number) => (
+                                <div key={i} className="p-8 bg-slate-50 rounded-2xl border border-slate-100" style={{ breakInside: 'avoid' }}>
+                                    <p className="text-lg font-black mb-4 leading-tight">{i+1}. {q.question}</p>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        {q.options?.map((opt: string, oi: number) => (
+                                            <div key={oi} className={`p-4 border-2 rounded-xl text-xs font-black uppercase tracking-tight ${opt === q.answer ? 'bg-white border-green-500 text-green-700 shadow-sm' : 'bg-white border-slate-100 opacity-40'}`}>
+                                                {opt}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </section>
 
-                                <section className="mb-24">
-                                <h2 className="text-4xl font-black uppercase italic tracking-tighter mb-10 border-b-2 border-slate-100 pb-4 flex items-center gap-4">
-                                <span className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white text-lg font-black italic">II</span> 
-                                Recall Validation
-                                </h2>
-                                <div className="space-y-12 pl-10">
-                                {summary?.quiz?.map((q: any, i: number) => (
-                                    <div key={i}>
-                                        <p className="text-2xl font-black mb-6">{i+1}. {q.question}</p>
-                                        <div className="grid grid-cols-2 gap-6">
-                                            {q.options?.map((opt: string, oi: number) => (
-                                                <div key={oi} className={`p-6 border-2 rounded-[2rem] text-sm font-bold ${opt === q.answer ? 'bg-green-50 border-green-200 text-green-800' : 'opacity-30 border-slate-100'}`}>{opt}</div>
+                    <section className="mb-16" style={{ breakInside: 'avoid' }}>
+                        <div className="flex items-center gap-4 mb-10">
+                            <div className="w-12 h-12 bg-purple-600 rounded-lg flex items-center justify-center text-white text-xl font-black">III</div>
+                            <h2 className="text-3xl font-black uppercase italic tracking-tighter border-b-2 border-slate-100 flex-1 pb-2">Mastery Assessment</h2>
+                        </div>
+                        <div className="space-y-8 pl-8">
+                            {summary?.exam?.map((q: any, i: number) => (
+                                <div key={i} className="p-8 bg-slate-50 rounded-2xl border border-slate-100" style={{ breakInside: 'avoid' }}>
+                                    <p className="text-lg font-black mb-4 leading-tight">{i+1}. {q.question}</p>
+                                    {q.options && (
+                                        <div className="grid grid-cols-2 gap-4">
+                                            {q.options.map((opt: string, oi: number) => (
+                                                <div key={oi} className={`p-4 border-2 rounded-xl text-xs font-black uppercase tracking-tight ${opt === q.answer ? 'bg-white border-purple-500 text-purple-700 shadow-sm' : 'bg-white border-slate-100 opacity-40'}`}>
+                                                    {opt}
+                                                </div>
                                             ))}
                                         </div>
-                                    </div>
-                                ))}
+                                    )}
                                 </div>
-                                </section>
+                            ))}
+                        </div>
+                    </section>
 
-                                <div style={{ pageBreakAfter: 'always' }} />
-
-                                <section>
-                                <h2 className="text-4xl font-black uppercase italic tracking-tighter mb-10 border-b-2 border-slate-100 pb-4 flex items-center gap-4">
-                                <span className="w-10 h-10 bg-purple-600 rounded-xl flex items-center justify-center text-white text-lg font-black italic">III</span> 
-                                Mastery Assessment
-                                </h2>
-                                <div className="space-y-12 pl-10">
-                                {summary?.exam?.map((q: any, i: number) => (
-                                    <div key={i}>
-                                        <p className="text-2xl font-black mb-6">{i+1}. {q.question}</p>
-                                        {q.options && (
-                                            <div className="grid grid-cols-2 gap-6">
-                                                {q.options.map((opt: string, oi: number) => (
-                                                    <div key={oi} className={`p-6 border-2 rounded-[2rem] text-sm font-bold ${opt === q.answer ? 'bg-purple-50 border-purple-200 text-purple-800' : 'opacity-30 border-slate-100'}`}>{opt}</div>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-                                ))}
-                                </div>
-                                </section>
-
-                                <footer className="mt-40 pt-12 border-t text-center text-[10px] font-black uppercase tracking-[0.8em] opacity-20">
-                                Neural Intelligence Grid // Proctored Generation v2.4
-                                </footer>
-                                </div>
-                                </div>
+                    <footer className="mt-20 pt-8 border-t-2 border-slate-900 flex justify-between items-center opacity-40">
+                        <p className="text-[8px] font-black uppercase tracking-[0.4em]">NEURAL STUDY AI // CORE PROTOCOL V2.5</p>
+                        <p className="text-[8px] font-black uppercase tracking-[0.4em]">END OF REPORT</p>
+                    </footer>
+                </div>
+            </div>
             </div>
         </div>
     );

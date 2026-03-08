@@ -12,6 +12,8 @@ import path from 'path';
 
 dotenv.config();
 
+const PORT = process.env.PORT || 4000;
+
 // Connect to MongoDB
 connectDB();
 
@@ -19,6 +21,43 @@ const app = express();
 
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
+
+// Request Logger
+app.use((req, res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+    next();
+});
+
+app.get('/api/ping', (req, res) => res.json({ message: 'pong', timestamp: new Date() }));
+
+// Helper for JSON repair
+const repairJSON = (str) => {
+    let json = str.trim();
+    if (json.startsWith('```json')) json = json.replace(/```json/g, '').replace(/```/g, '').trim();
+    
+    // Fix unterminated string
+    let openQuotes = 0;
+    for (let i = 0; i < json.length; i++) {
+        if (json[i] === '"' && json[i-1] !== '\\') openQuotes++;
+    }
+    if (openQuotes % 2 !== 0) json += '"';
+
+    // Fix missing brackets
+    const stack = [];
+    for (let i = 0; i < json.length; i++) {
+        if (json[i] === '{') stack.push('}');
+        else if (json[i] === '[') stack.push(']');
+        else if (json[i] === '}' || json[i] === ']') {
+            if (stack.length > 0 && stack[stack.length - 1] === json[i]) {
+                stack.pop();
+            }
+        }
+    }
+    while (stack.length > 0) {
+        json += stack.pop();
+    }
+    return json;
+};
 
 let GROQ_API_KEY = process.env.GROQ_API_KEY || process.env.VITE_GROQ_API_KEY;
 let OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -126,19 +165,27 @@ app.post('/api/generate-cards', async (req, res) => {
 
 // --- GENERATE QUIZ ---
 app.post('/api/generate-quiz', async (req, res) => {
-    const { documentContent, title, count = 10, existingQuestions = [] } = req.body;
+    const { documentContent, title, count = 10, existingQuestions = [], types = ['mcq', 'tf', 'short'] } = req.body;
     try {
-        const prompt = `Based on "${title}", generate a quiz with ${count} multiple-choice questions. 
-        Each must have: "question", "options" (4 strings), "answer" (correct string), and "explanation".
+        const prompt = `Based on "${title}", generate a diverse quiz with ${count} questions. 
+        Include a mix of: ${types.join(', ')}.
+        
+        Return ONLY a valid JSON array of objects. Each object must have:
+        - "type": "mcq", "tf", or "short"
+        - "question": "the question text"
+        - "options": (for mcq only, array of 4 strings)
+        - "answer": "the correct answer" (string for mcq/tf, keywords for short answer)
+        - "explanation": "a brief explanation"
+        - "points": 10
+        
         ${existingQuestions.length > 0 ? `AVOID these existing questions: ${existingQuestions.join(' | ')}` : ''}
-        Return ONLY valid JSON array.
         Document Content: ${documentContent.slice(0, 15000)}`;
 
         const completion = await groq.chat.completions.create({
-            messages: [{ role: "system", content: "JSON-only response bot." }, { role: "user", content: prompt }],
+            messages: [{ role: "system", content: "You are a specialized academic quiz generator. Output ONLY raw JSON." }, { role: "user", content: prompt }],
             model: "llama-3.3-70b-versatile",
-            temperature: 0.3,
-            max_tokens: 3000,
+            temperature: 0.4,
+            max_tokens: 4000,
         });
 
         const repaired = repairJSON(completion.choices[0]?.message?.content || "[]");
@@ -149,34 +196,21 @@ app.post('/api/generate-quiz', async (req, res) => {
     }
 });
 
-// Helper for JSON repair
-const repairJSON = (str) => {
-    let json = str.trim();
-    if (json.startsWith('```json')) json = json.replace(/```json/g, '').replace(/```/g, '').trim();
-    
-    // Fix unterminated string
-    let openQuotes = 0;
-    for (let i = 0; i < json.length; i++) {
-        if (json[i] === '"' && json[i-1] !== '\\') openQuotes++;
+// --- VERIFY SHORT ANSWER ---
+app.post('/api/verify-answer', async (req, res) => {
+    const { question, correctAnswer, userAnswer } = req.body;
+    try {
+        const prompt = `Question: ${question}\nCorrect Answer/Keywords: ${correctAnswer}\nUser Answer: ${userAnswer}\n\nIs the user answer correct or sufficiently close? Return ONLY JSON: {"isCorrect": true/false, "feedback": "..."}`;
+        const completion = await groq.chat.completions.create({
+            messages: [{ role: "system", content: "JSON-only grader." }, { role: "user", content: prompt }],
+            model: "llama-3.3-70b-versatile",
+            temperature: 0.2,
+        });
+        res.json(JSON.parse(repairJSON(completion.choices[0]?.message?.content || "{}")));
+    } catch (error) {
+        res.status(500).json({ error: error.message });
     }
-    if (openQuotes % 2 !== 0) json += '"';
-
-    // Fix missing brackets
-    const stack = [];
-    for (let i = 0; i < json.length; i++) {
-        if (json[i] === '{') stack.push('}');
-        else if (json[i] === '[') stack.push(']');
-        else if (json[i] === '}' || json[i] === ']') {
-            if (stack.length > 0 && stack[stack.length - 1] === json[i]) {
-                stack.pop();
-            }
-        }
-    }
-    while (stack.length > 0) {
-        json += stack.pop();
-    }
-    return json;
-};
+});
 
 // --- GENERATE NEURAL SUMMARY ---
 app.post('/api/generate-neural-summary', async (req, res) => {
@@ -351,23 +385,36 @@ app.get('/api/health', (req, res) => {
 
 // --- NON-STREAMING CHAT FALLBACK ---
 app.post('/api/chat-simple', async (req, res) => {
-    let { message, documentContent, conversationHistory, documentId } = req.body;
+    let { message, documentContent, conversationHistory, documentId, modelId } = req.body;
     
     if (!documentContent && documentId && supabase) {
         const { data } = await supabase.from('documents').select('content').eq('id', documentId).single();
         if (data) documentContent = data.content;
     }
 
+    const selectedModel = modelId || "llama-3.3-70b-versatile";
+
     try {
-        const completion = await groq.chat.completions.create({
-            messages: [
-                { role: "system", content: `You are a Study Assistant. Context:\n${documentContent?.slice(0, 20000) || "No context."}` },
-                ...(conversationHistory || []),
-                { role: "user", content: message }
-            ],
-            model: "llama-3.3-70b-versatile",
-            stream: false,
-        });
+        let completion;
+        const messages = [
+            { role: "system", content: `You are a Study Assistant. Context:\n${documentContent?.slice(0, 20000) || "No context."}` },
+            ...(conversationHistory || []),
+            { role: "user", content: message }
+        ];
+
+        if (selectedModel.startsWith("gpt-") && openai) {
+            completion = await openai.chat.completions.create({
+                messages,
+                model: selectedModel,
+                stream: false,
+            });
+        } else {
+            completion = await groq.chat.completions.create({
+                messages,
+                model: selectedModel,
+                stream: false,
+            });
+        }
         res.json({ content: completion.choices[0]?.message?.content || "" });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -376,7 +423,7 @@ app.post('/api/chat-simple', async (req, res) => {
 
 // --- CHAT ENDPOINT ---
 app.post('/api/chat', async (req, res) => {
-    let { message, documentContent, conversationHistory, userId, documentId } = req.body;
+    let { message, documentContent, conversationHistory, userId, documentId, modelId } = req.body;
     
     // Fallback: Fetch content if missing but ID is present
     if (!documentContent && documentId && supabase) {
@@ -392,16 +439,29 @@ app.post('/api/chat', async (req, res) => {
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
     
+    const selectedModel = modelId || "llama-3.3-70b-versatile";
+
     try {
-        const stream = await groq.chat.completions.create({
-            messages: [
-                { role: "system", content: `You are a Study Assistant. Context:\n${documentContent?.slice(0, 30000) || "No context provided."}` },
-                ...(conversationHistory || []),
-                { role: "user", content: message }
-            ],
-            model: "llama-3.3-70b-versatile",
-            stream: true,
-        });
+        const messages = [
+            { role: "system", content: `You are a Study Assistant. Context:\n${documentContent?.slice(0, 30000) || "No context provided."}` },
+            ...(conversationHistory || []),
+            { role: "user", content: message }
+        ];
+
+        let stream;
+        if (selectedModel.startsWith("gpt-") && openai) {
+             stream = await openai.chat.completions.create({
+                messages,
+                model: selectedModel,
+                stream: true,
+            });
+        } else {
+            stream = await groq.chat.completions.create({
+                messages,
+                model: selectedModel,
+                stream: true,
+            });
+        }
 
         let fullResponse = "";
         for await (const chunk of stream) {
@@ -596,7 +656,7 @@ app.get('/api/leaderboard', async (req, res) => {
     try {
         const { data, error } = await supabase
             .from('profiles')
-            .select('username, stars_count')
+            .select('username, stars_count, xp, level, daily_streak')
             .order('stars_count', { ascending: false })
             .limit(50);
         
@@ -661,7 +721,174 @@ app.post('/api/admin/reset-password', async (req, res) => {
     }
 });
 
-const PORT = process.env.PORT || 4000;
+// --- SMART CONTENT ENGINE: Unified Generation ---
+app.post('/api/generate-smart-content', async (req, res) => {
+    const { documentContent, title, documentId, userId } = req.body;
+    
+    try {
+        const prompt = `You are a high-level academic processing engine. Analyze the following document titled "${title}" and generate a comprehensive study pack.
+        
+        The response must be a SINGLE JSON object with this EXACT structure:
+        {
+          "summary": "A deep, structured markdown summary with headings and key takeaways.",
+          "flashcards": [
+            {"question": "...", "answer": "..."}
+          ],
+          "quiz": [
+            {"question": "...", "options": ["...", "...", "...", "..."], "answer": "...", "explanation": "..."}
+          ]
+        }
+        
+        Generate at least 8 flashcards and 5 quiz questions.
+        Return ONLY the raw JSON. No markdown code blocks.
+
+        Document Content:
+        ${documentContent.slice(0, 20000)}`;
+
+        const completion = await groq.chat.completions.create({
+            messages: [
+                { role: "system", content: "You are a JSON-only academic processing engine." },
+                { role: "user", content: prompt }
+            ],
+            model: "llama-3.3-70b-versatile",
+            temperature: 0.3,
+            max_tokens: 8192,
+        });
+
+        let responseText = completion.choices[0]?.message?.content || "{}";
+        const cleanJSON = (text) => {
+            const start = text.indexOf('{');
+            const end = text.lastIndexOf('}');
+            if (start !== -1 && end !== -1) {
+                return JSON.parse(repairJSON(text.substring(start, end + 1)));
+            }
+            throw new Error("Invalid response format");
+        };
+
+        const data = cleanJSON(responseText);
+        
+        if (supabase && userId && documentId) {
+            // 1. Save Summary
+            await supabase.from('neural_summaries').insert([{
+                user_id: userId,
+                document_id: documentId,
+                title: `AI Study Pack: ${title}`,
+                summary_text: data.summary,
+                quiz_data: data.quiz,
+                exam_data: []
+            }]);
+
+            // 2. Save Flashcards
+            const cardsToInsert = data.flashcards.map(c => ({
+                user_id: userId,
+                document_id: documentId,
+                question: c.question,
+                answer: c.answer,
+                difficulty: 'medium'
+            }));
+            await supabase.from('flashcards').insert(cardsToInsert);
+
+            // 3. Save Quiz
+            await supabase.from('quizzes').insert([{
+                user_id: userId,
+                document_id: documentId,
+                title: `AI Master Quiz: ${title}`,
+                questions: data.quiz,
+                total_questions: data.quiz.length
+            }]);
+
+            // 4. Award XP for processing
+            await supabase.rpc('increment_stars', { user_id: userId });
+            const { data: profile } = await supabase.from('profiles').select('xp').eq('id', userId).single();
+            const currentXp = profile?.xp || 0;
+            await supabase.from('profiles').update({ xp: currentXp + 50 }).eq('id', userId);
+        }
+
+        res.json({ success: true, ...data });
+    } catch (error) {
+        console.error("Smart Content Error:", error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// --- AI STUDY PLANNER ---
+app.post('/api/generate-plan', async (req, res) => {
+    const { subjects = [], system = 'General', userId, extensive = false } = req.body;
+    console.log(`[AI Planner] Request for user ${userId}. Subjects:`, subjects?.length, "System:", system, "Extensive:", extensive);
+
+    if (!GROQ_API_KEY || GROQ_API_KEY === 'MISSING_KEY') {
+        console.error("[AI Planner] Groq API Key is missing.");
+        return res.status(500).json({ error: "AI Service configuration missing (Groq Key)." });
+    }
+
+    if (!Array.isArray(subjects) || subjects.length === 0) {
+        return res.status(400).json({ error: "No subjects provided for planning." });
+    }
+
+    try {
+        const subjectsString = subjects.map(s => typeof s === 'string' ? s : s.name).join(', ');
+        const sessionCount = extensive ? 5 : 3;
+        const prompt = `You are a professional academic coordinator. Generate a high-performance 7-day study schedule for a student in the ${system} system.
+
+        Subjects to incorporate: ${subjectsString}
+
+        Guidelines:
+        - Provide EXACTLY ${sessionCount} structured study sessions per day.
+        - Vary the activity types: "Deep Work", "Neural Recall", "Active Practice", "Review Sync", "Cognitive Drill".
+        - Ensure a logical progression throughout the week.
+        - The day should span from morning to evening.
+
+        REQUIRED OUTPUT FORMAT (Raw JSON only):
+        {
+          "plan": [
+            {
+              "day": "Monday",
+              "tasks": [
+                {"time": "09:00", "subject": "Subject Name", "activity": "Specific Activity Description"}
+              ]
+            }
+          ]
+        }`;
+        const completion = await groq.chat.completions.create({
+            messages: [
+                { role: "system", content: "You are a JSON-only academic planning engine." }, 
+                { role: "user", content: prompt }
+            ],
+            model: "llama-3.3-70b-versatile",
+            temperature: 0.6,
+            max_tokens: 4000,
+        });
+
+        const responseText = completion.choices[0]?.message?.content || "";
+        if (!responseText) throw new Error("AI returned empty response");
+
+        // Robust JSON extraction
+        const start = responseText.indexOf('{');
+        const end = responseText.lastIndexOf('}');
+        if (start === -1 || end === -1) {
+            console.error("[AI Planner] AI failed to output JSON:", responseText);
+            throw new Error("AI output was not in JSON format");
+        }
+        
+        const jsonString = responseText.substring(start, end + 1);
+        const data = JSON.parse(repairJSON(jsonString));
+        
+        if (!data.plan || !Array.isArray(data.plan)) {
+            throw new Error("Generated plan structure is invalid");
+        }
+
+        res.json(data);
+    } catch (error) {
+        console.error("AI Planner Error:", error);
+        res.status(500).json({ error: "Plan Generation Failed: " + error.message });
+    }
+});
+// Global Error Handler
+app.use((err, req, res, next) => {
+    console.error("💥 Unhandled Server Error:", err);
+    res.status(500).json({ error: "Internal Server Error", details: err.message });
+});
+
 const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Unified Server running on port ${PORT}`);
     console.log(`🔗 Local Link: http://localhost:${PORT}`);

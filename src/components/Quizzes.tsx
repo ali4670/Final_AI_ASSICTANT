@@ -3,21 +3,51 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import {
   ArrowLeft, CheckCircle2, XCircle, RefreshCw,
-  Trophy, Loader, ChevronRight, Brain, Sparkles, ChevronDown, Layout, Search, X
+  Trophy, Loader, ChevronRight, Brain, Sparkles, ChevronDown, Layout, Search, X, Clock, FileText
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTheme } from '../contexts/ThemeContext';
 import { StudentAnswering } from './AnimatedVisual';
+import { generateNeuralPDF } from '../lib/pdfGenerator';
+import { useRef } from 'react';
 
 export default function Quizzes({ onNavigate, documentId }: { onNavigate: (p: string, id?: string) => void, documentId?: string }) {
   const { user } = useAuth();
   const { theme } = useTheme();
+  const printRef = useRef<HTMLDivElement>(null);
+  const [isExporting, setIsExporting] = useState(false);
   const [questions, setQuestions] = useState<any[]>([]);
+
+// ... (existing state)
+
+  const downloadPDF = async () => {
+    if (!printRef.current || isExporting || questions.length === 0) return;
+    setIsExporting(true);
+    try {
+      await generateNeuralPDF(printRef.current, {
+        title: `NEURAL QUIZ: ${docTitle}`,
+        subtitle: 'ACADEMIC MASTERY EVALUATION LOG',
+        userName: user?.email || 'GUEST_EXPLORER',
+        theme: theme,
+        fileName: `Quiz_${docTitle.replace(/\s+/g, '_')}`
+      });
+    } catch (err) {
+      console.error("Quiz Export Error:", err);
+      alert("Failed to synthesize quiz report.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
   const [docTitle, setDocTitle] = useState('');
   const [currentIndex, setCurrentIndex] = useState(0);
   const [score, setScore] = useState(0);
   const [showResult, setShowResult] = useState(false);
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
+  const [shortAnswer, setShortAnswer] = useState('');
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const [timeLeft, setTimeLeft] = useState(0);
+  const [timerActive, setTimerActive] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const [documents, setDocuments] = useState<any[]>([]);
@@ -29,6 +59,18 @@ export default function Quizzes({ onNavigate, documentId }: { onNavigate: (p: st
     if (documentId) loadQuizData();
     else loadAllDocuments();
   }, [documentId]);
+
+  // Timer logic
+  useEffect(() => {
+    let interval: any;
+    if (timerActive && timeLeft > 0) {
+      interval = setInterval(() => setTimeLeft(prev => prev - 1), 1000);
+    } else if (timeLeft === 0 && timerActive) {
+      setTimerActive(false);
+      setShowResult(true);
+    }
+    return () => clearInterval(interval);
+  }, [timerActive, timeLeft]);
 
   const loadAllDocuments = async () => {
     setLoading(true);
@@ -43,41 +85,101 @@ export default function Quizzes({ onNavigate, documentId }: { onNavigate: (p: st
         const { data: doc } = await supabase.from('documents').select('title').eq('id', documentId).single();
         if (doc) setDocTitle(doc.title);
 
-        const { data: flashcards } = await supabase.from('flashcards').select('*').eq('document_id', documentId);
+        // Check for existing quizzes first
+        const { data: existingQuizzes } = await supabase.from('quizzes').select('*').eq('document_id', documentId).order('created_at', { ascending: false }).limit(1);
 
-        if (flashcards && flashcards.length > 0) {
-            const mcqFormat = flashcards.map((card, i) => {
-                const otherUniqueAnswers = Array.from(new Set(
-                    flashcards
-                        .filter((_, idx) => idx !== i)
-                        .map(c => c.answer.trim())
-                ));
-                const distractors = otherUniqueAnswers.sort(() => 0.5 - Math.random()).slice(0, 3);
-                const options = Array.from(new Set([card.answer.trim(), ...distractors])).sort(() => 0.5 - Math.random());
-                return { ...card, options };
-            });
-            setQuestions(mcqFormat);
+        if (existingQuizzes && existingQuizzes.length > 0) {
+            setQuestions(existingQuizzes[0].questions);
+            setTimeLeft(existingQuizzes[0].questions.length * 60); // 1 minute per question
+            setTimerActive(true);
+        } else {
+            // Fallback to generating from flashcards if no quiz exists
+            const { data: flashcards } = await supabase.from('flashcards').select('*').eq('document_id', documentId);
+            if (flashcards && flashcards.length > 0) {
+                const mcqFormat = flashcards.map((card, i) => {
+                    const otherUniqueAnswers = Array.from(new Set(
+                        flashcards
+                            .filter((_, idx) => idx !== i)
+                            .map(c => c.answer.trim())
+                    ));
+                    const distractors = otherUniqueAnswers.sort(() => 0.5 - Math.random()).slice(0, 3);
+                    const options = Array.from(new Set([card.answer.trim(), ...distractors])).sort(() => 0.5 - Math.random());
+                    return { ...card, options, type: 'mcq' };
+                });
+                setQuestions(mcqFormat);
+                setTimeLeft(mcqFormat.length * 60);
+                setTimerActive(true);
+            }
         }
     } catch (e) {
         console.error(e);
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
   };
 
   const handleChoice = (option: string) => {
-    if (selectedOption) return;
+    if (selectedOption || isVerifying) return;
     setSelectedOption(option);
     if (option === questions[currentIndex].answer) setScore(s => s + 1);
+  };
+
+  const handleShortAnswerSubmit = async () => {
+    if (!shortAnswer.trim() || isVerifying) return;
+    setIsVerifying(true);
+    try {
+      const res = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:4000'}/api/verify-answer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: questions[currentIndex].question,
+          correctAnswer: questions[currentIndex].answer,
+          userAnswer: shortAnswer
+        })
+      });
+      const result = await res.json();
+      if (result.isCorrect) setScore(s => s + 1);
+      setFeedback(result.feedback);
+      setSelectedOption('submitted'); // lock the question
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  const awardRewards = async () => {
+    if (!user) return;
+    const finalScore = Math.round((score / questions.length) * 100);
+    if (finalScore >= 50) {
+        // Award XP: 10 XP per correct answer
+        await supabase.rpc('add_xp', { user_id: user.id, xp_to_add: score * 10 });
+        // Award Star if score >= 80%
+        if (finalScore >= 80) {
+            await supabase.rpc('increment_stars', { user_id: user.id, amount: 1 });
+        }
+    }
+    // Update streak
+    await supabase.rpc('update_streak', { user_id: user.id });
   };
 
   const handleNext = () => {
     if (currentIndex < questions.length - 1) {
       setCurrentIndex(prev => prev + 1);
       setSelectedOption(null);
+      setShortAnswer('');
+      setFeedback(null);
     } else {
       setShowResult(true);
+      setTimerActive(false);
+      awardRewards();
     }
+  };
+
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
   const jumpToQuestion = (index: number) => {
@@ -157,7 +259,7 @@ export default function Quizzes({ onNavigate, documentId }: { onNavigate: (p: st
 
   if (!documentId) {
     return (
-        <div className={`min-h-screen p-8 relative z-10 transition-colors duration-700 ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+        <div className={`min-h-screen pt-12 p-8 relative z-10 transition-colors duration-700 ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
             <div className="max-w-4xl mx-auto">
                 <motion.button 
                     initial={{ opacity: 0, x: -10 }}
@@ -224,13 +326,20 @@ export default function Quizzes({ onNavigate, documentId }: { onNavigate: (p: st
         <div className="w-full max-w-5xl flex flex-col md:flex-row justify-between items-center mb-12 gap-6 mt-12">
           <motion.button 
             whileHover={{ x: -5 }}
-            onClick={() => onNavigate('documents')} 
+            onClick={() => onNavigate('dashboard')} 
             className="flex items-center gap-2 font-black text-[10px] uppercase tracking-widest transition opacity-50 hover:opacity-100"
           >
             <ArrowLeft size={16} /> Terminate Session
           </motion.button>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-6">
+            <div className={`flex items-center gap-3 px-6 py-3 rounded-full border transition-all ${
+              timeLeft < 60 ? 'bg-red-500/10 border-red-500/30 text-red-500 animate-pulse' : 'bg-white/5 border-white/10 text-blue-400'
+            }`}>
+              <Clock size={16} />
+              <span className="font-black tabular-nums tracking-widest text-sm">{formatTime(timeLeft)}</span>
+            </div>
+
             <div className="relative">
                 <button 
                     onClick={() => { setShowNav(!showNav); setShowSearch(false); }}
@@ -373,39 +482,83 @@ export default function Quizzes({ onNavigate, documentId }: { onNavigate: (p: st
                 <div className={`rounded-[4rem] p-12 shadow-2xl mb-10 border transition-all ${
                     theme === 'dark' ? 'bg-[#0D0D0D] border-white/5' : 'bg-white border-slate-100'
                 }`}>
+                    <div className="flex justify-between items-start mb-8">
+                      <span className="px-4 py-1.5 bg-indigo-600/10 border border-indigo-500/20 rounded-full text-[9px] font-black text-indigo-500 uppercase tracking-widest">
+                        {questions[currentIndex]?.type || 'MCQ'} NODE
+                      </span>
+                      <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest opacity-30">
+                        <Sparkles size={12} /> 10 Points
+                      </div>
+                    </div>
+
                     <h3 className={`text-3xl font-black italic uppercase tracking-tighter mb-16 leading-tight ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
                     {questions[currentIndex]?.question}
                     </h3>
 
                     <div className="grid grid-cols-1 gap-4">
-                    {questions[currentIndex]?.options.map((option: string) => {
-                        const isCorrect = option === questions[currentIndex].answer;
-                        const isSelected = selectedOption === option;
+                    {questions[currentIndex]?.type === 'short' ? (
+                      <div className="space-y-6">
+                        <textarea
+                          value={shortAnswer}
+                          onChange={(e) => setShortAnswer(e.target.value)}
+                          disabled={!!selectedOption}
+                          placeholder="Synthesize your response here..."
+                          className={`w-full p-8 rounded-[2rem] border-2 bg-transparent outline-none font-bold text-lg min-h-[150px] transition-all ${
+                            theme === 'dark' ? 'border-white/10 focus:border-indigo-500' : 'border-slate-100 focus:border-indigo-500'
+                          }`}
+                        />
+                        {!selectedOption && (
+                          <button
+                            onClick={handleShortAnswerSubmit}
+                            disabled={!shortAnswer.trim() || isVerifying}
+                            className="w-full py-6 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-3 disabled:opacity-50"
+                          >
+                            {isVerifying ? <Loader className="animate-spin" size={16} /> : <CheckCircle2 size={16} />}
+                            Verify Protocol
+                          </button>
+                        )}
+                        {feedback && (
+                          <motion.div 
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className={`p-6 rounded-2xl border ${
+                              feedback.toLowerCase().includes('correct') ? 'bg-green-500/10 border-green-500/30 text-green-500' : 'bg-red-500/10 border-red-500/30 text-red-500'
+                            }`}
+                          >
+                            <p className="text-sm font-bold">{feedback}</p>
+                          </motion.div>
+                        )}
+                      </div>
+                    ) : (
+                      (questions[currentIndex]?.type === 'tf' ? ['True', 'False'] : questions[currentIndex]?.options)?.map((option: string) => {
+                          const isCorrect = option === questions[currentIndex].answer;
+                          const isSelected = selectedOption === option;
 
-                        let btnStyle = "w-full text-left p-7 rounded-[2rem] border-2 transition-all duration-300 font-bold text-base flex justify-between items-center ";
-                        if (!selectedOption) {
-                            btnStyle += theme === 'dark' 
-                                ? "border-white/5 bg-white/5 hover:border-indigo-500 hover:bg-indigo-500/10" 
-                                : "border-slate-50 hover:border-indigo-500 hover:bg-indigo-50";
-                        }
-                        else if (isCorrect) btnStyle += "border-green-500 bg-green-500/10 text-green-500";
-                        else if (isSelected && !isCorrect) btnStyle += "border-red-500 bg-red-500/10 text-red-500";
-                        else btnStyle += "opacity-20 border-transparent";
+                          let btnStyle = "w-full text-left p-7 rounded-[2rem] border-2 transition-all duration-300 font-bold text-base flex justify-between items-center ";
+                          if (!selectedOption) {
+                              btnStyle += theme === 'dark' 
+                                  ? "border-white/5 bg-white/5 hover:border-indigo-500 hover:bg-indigo-500/10" 
+                                  : "border-slate-50 hover:border-indigo-500 hover:bg-indigo-50";
+                          }
+                          else if (isCorrect) btnStyle += "border-green-500 bg-green-500/10 text-green-500";
+                          else if (isSelected && !isCorrect) btnStyle += "border-red-500 bg-red-500/10 text-red-500";
+                          else btnStyle += "opacity-20 border-transparent";
 
-                        return (
-                            <motion.button 
-                                key={option} 
-                                whileTap={{ scale: 0.98 }}
-                                onClick={() => handleChoice(option)} 
-                                disabled={!!selectedOption} 
-                                className={btnStyle}
-                            >
-                                <span>{option}</span>
-                                {selectedOption && isCorrect && <CheckCircle2 size={24} />}
-                                {isSelected && !isCorrect && <XCircle size={24} />}
-                            </motion.button>
-                        );
-                    })}
+                          return (
+                              <motion.button 
+                                  key={option} 
+                                  whileTap={{ scale: 0.98 }}
+                                  onClick={() => handleChoice(option)} 
+                                  disabled={!!selectedOption} 
+                                  className={btnStyle}
+                              >
+                                  <span>{option}</span>
+                                  {selectedOption && isCorrect && <CheckCircle2 size={24} />}
+                                  {isSelected && !isCorrect && <XCircle size={24} />}
+                              </motion.button>
+                          );
+                      })
+                    )}
                     </div>
                 </div>
 
@@ -441,6 +594,14 @@ export default function Quizzes({ onNavigate, documentId }: { onNavigate: (p: st
                     <p className="opacity-40 font-black uppercase tracking-[0.4em] text-[10px] mb-16 px-4">{score} correct nodes // {questions.length} samples verified</p>
 
                     <div className="flex flex-col gap-4">
+                    <button 
+                        onClick={downloadPDF}
+                        disabled={isExporting}
+                        className="w-full bg-white text-indigo-600 border-2 border-indigo-600 py-6 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-indigo-50 transition shadow-xl flex items-center justify-center gap-3 disabled:opacity-50"
+                    >
+                        {isExporting ? <Loader className="animate-spin" size={18} /> : <FileText size={18} />}
+                        Export Quiz Report
+                    </button>
                     <button onClick={() => { setCurrentIndex(0); setScore(0); setShowResult(false); setSelectedOption(null); }} className="w-full bg-indigo-600 text-white py-6 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-indigo-700 transition shadow-xl shadow-indigo-600/20">
                         <RefreshCw size={18} className="inline mr-3"/> Re-initialize Unit
                     </button>
@@ -454,6 +615,61 @@ export default function Quizzes({ onNavigate, documentId }: { onNavigate: (p: st
                 </motion.div>
             )}
         </AnimatePresence>
+
+        {/* --- PREMIUM PRINT TEMPLATE --- */}
+        <div style={{ position: 'absolute', top: '-9999px', left: '-9999px' }}>
+            <div ref={printRef} className="p-16 bg-white text-slate-900" style={{ width: '850px' }}>
+                <div className="mb-16 border-b-[8px] border-slate-950 pb-12">
+                    <div className="flex justify-between items-end mb-8">
+                        <div>
+                            <h1 className="text-5xl font-black italic uppercase tracking-tighter leading-none mb-2 text-slate-900">NEURAL<br/>QUIZ REPORT</h1>
+                            <p className="text-[10px] font-black uppercase tracking-[0.5em] text-indigo-600">Unit Verification Record</p>
+                        </div>
+                        <div className="text-right">
+                            <p className="text-[8px] font-black uppercase tracking-[0.3em] opacity-30 mb-1">UNIT EVALUATION</p>
+                            <p className="text-xl font-black italic uppercase tracking-tighter">{docTitle || 'Active Session'}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="mb-16 grid grid-cols-3 gap-6">
+                    <div className="p-8 bg-indigo-50/50 rounded-2xl text-center border border-indigo-100">
+                        <p className="text-[8px] font-black uppercase tracking-widest text-indigo-600 mb-2">Final Score</p>
+                        <p className="text-4xl font-black italic tracking-tighter text-indigo-700">{Math.round((score/questions.length)*100)}%</p>
+                    </div>
+                    <div className="p-8 bg-slate-50/50 rounded-2xl text-center border border-slate-100">
+                        <p className="text-[8px] font-black uppercase tracking-widest opacity-30 mb-2">Verified Nodes</p>
+                        <p className="text-4xl font-black italic tracking-tighter">{score}</p>
+                    </div>
+                    <div className="p-8 bg-slate-50/50 rounded-2xl text-center border border-slate-100">
+                        <p className="text-[8px] font-black uppercase tracking-widest opacity-30 mb-2">Total Samples</p>
+                        <p className="text-4xl font-black italic tracking-tighter">{questions.length}</p>
+                    </div>
+                </div>
+
+                <div className="space-y-10">
+                    {questions.map((q, i) => (
+                        <div key={i} className="p-10 rounded-2xl border border-slate-100 bg-white" style={{ breakInside: 'avoid' }}>
+                            <div className="flex items-center gap-4 mb-6 opacity-30">
+                                <span className="text-[8px] font-black uppercase tracking-[0.4em]">Examination Node 0{i+1}</span>
+                            </div>
+                            <h3 className="text-xl font-black italic uppercase tracking-tighter mb-8 leading-tight">{q.question}</h3>
+                            <div className="space-y-3">
+                                <div className="p-6 bg-green-50 border border-green-100 rounded-xl flex justify-between items-center">
+                                    <span className="text-base font-bold text-green-700">{q.answer}</span>
+                                    <span className="text-[8px] font-black text-green-600 uppercase tracking-widest">Verified Answer</span>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+
+                <footer className="mt-20 pt-8 border-t-2 border-slate-900 flex justify-between items-center opacity-40">
+                    <p className="text-[8px] font-black uppercase tracking-[0.4em]">NEURAL STUDY AI // MASTERY PROTOCOL V2.5</p>
+                    <p className="text-[8px] font-black uppercase tracking-[0.4em]">END OF ASSESSMENT</p>
+                </footer>
+            </div>
+        </div>
         
         <style>{`
             .custom-scrollbar::-webkit-scrollbar { width: 4px; }

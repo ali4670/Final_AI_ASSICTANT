@@ -1,0 +1,128 @@
+-- ======================================================
+-- NEURAL STUDY AI - DATABASE RESET (v3.9)
+-- ACTION: COMPLETE REBUILD OF STUDY SESSIONS
+-- ======================================================
+
+-- 1. DELETE OLD TABLE AND RULES COMPLETELY
+DROP TABLE IF EXISTS public.study_sessions CASCADE;
+
+-- 2. CREATE FRESH TABLE WITH CORRECT COLUMNS
+CREATE TABLE public.study_sessions (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id uuid REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+    session_type text NOT NULL DEFAULT 'live' CHECK (session_type IN ('live', 'individual', 'group')),
+    title text NOT NULL,
+    subject text,
+    topic text,
+    duration_minutes integer DEFAULT 45,
+    zoom_link text,
+    participants uuid[] DEFAULT '{}',
+    is_active boolean DEFAULT true,
+    score integer,
+    content_id uuid,
+    document_id uuid,
+    created_at timestamptz DEFAULT now()
+);
+
+-- 3. ENABLE SECURITY
+ALTER TABLE public.study_sessions ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow all select" ON public.study_sessions FOR SELECT USING (true);
+CREATE POLICY "Allow individual insert" ON public.study_sessions FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Allow individual update" ON public.study_sessions FOR UPDATE USING (auth.uid() = user_id);
+
+-- 4. ENSURE STAR FUNCTION IS SYNCED
+CREATE OR REPLACE FUNCTION public.decrement_stars(amount int4, uid uuid)
+RETURNS int4 AS $$
+DECLARE final_val int4;
+BEGIN
+  UPDATE public.profiles SET stars_count = stars_count - amount 
+  WHERE id = uid AND stars_count >= amount
+  RETURNING stars_count INTO final_val;
+  IF final_val IS NULL THEN RAISE EXCEPTION 'Insufficient Stars'; END IF;
+  RETURN final_val;
+END; $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role, postgres, authenticated;
+
+-- ======================================================
+-- NEURAL STUDY AI - USER SUMMARIES & APPROVAL SYSTEM
+-- ======================================================
+
+CREATE TABLE IF NOT EXISTS public.user_summaries (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id uuid REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+    document_id uuid REFERENCES public.documents(id) ON DELETE SET NULL,
+    title text NOT NULL,
+    content text NOT NULL,
+    status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+    created_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE public.user_summaries ENABLE ROW LEVEL SECURITY;
+
+-- Idempotent Policy Creation
+DROP POLICY IF EXISTS "Students can view approved summaries" ON public.user_summaries;
+CREATE POLICY "Students can view approved summaries" ON public.user_summaries FOR SELECT USING (status = 'approved');
+
+DROP POLICY IF EXISTS "Users can view their own summaries" ON public.user_summaries;
+CREATE POLICY "Users can view their own summaries" ON public.user_summaries FOR SELECT USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can submit summaries" ON public.user_summaries;
+CREATE POLICY "Users can submit summaries" ON public.user_summaries FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Admins can manage all summaries" ON public.user_summaries;
+CREATE POLICY "Admins can manage all summaries" ON public.user_summaries FOR ALL USING (
+    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND is_admin = true)
+);
+
+-- Add summary fields to documents table
+ALTER TABLE public.documents ADD COLUMN IF NOT EXISTS is_summary boolean DEFAULT false;
+ALTER TABLE public.documents ADD COLUMN IF NOT EXISTS summary_status text DEFAULT 'approved' CHECK (summary_status IN ('pending', 'approved', 'rejected'));
+
+-- Update existing documents to be approved by default if not a summary
+UPDATE public.documents SET summary_status = 'approved' WHERE is_summary = false;
+
+-- ======================================================
+-- NEURAL STUDY AI - XP & STREAK FUNCTIONS
+-- ======================================================
+
+-- 1. ADD XP FUNCTION
+CREATE OR REPLACE FUNCTION public.add_xp(user_id uuid, xp_to_add int4)
+RETURNS void AS $$
+BEGIN
+  UPDATE public.profiles 
+  SET xp = COALESCE(xp, 0) + xp_to_add,
+      level = FLOOR(SQRT((COALESCE(xp, 0) + xp_to_add) / 100)) + 1
+  WHERE id = user_id;
+END; $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 2. UPDATE STREAK FUNCTION
+CREATE OR REPLACE FUNCTION public.update_streak(user_id uuid)
+RETURNS void AS $$
+DECLARE
+  last_study timestamptz;
+BEGIN
+  SELECT updated_at INTO last_study FROM public.profiles WHERE id = user_id;
+  
+  IF last_study IS NULL OR last_study < now() - interval '24 hours' THEN
+    UPDATE public.profiles SET daily_streak = 1, updated_at = now() WHERE id = user_id;
+  ELSIF last_study < now() - interval '12 hours' THEN
+    UPDATE public.profiles SET daily_streak = COALESCE(daily_streak, 0) + 1, updated_at = now() WHERE id = user_id;
+  END IF;
+END; $$
+LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 3. INCREMENT STARS FUNCTION
+CREATE OR REPLACE FUNCTION public.increment_stars(user_id uuid, amount int4 DEFAULT 1)
+RETURNS void AS $$
+BEGIN
+  UPDATE public.profiles 
+  SET stars_count = COALESCE(stars_count, 0) + amount 
+  WHERE id = user_id;
+END; $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 4. DOCUMENT VISIBILITY POLICY
+DROP POLICY IF EXISTS "Anyone can view approved summaries" ON public.documents;
+CREATE POLICY "Anyone can view approved summaries" ON public.documents 
+FOR SELECT USING (is_summary = true AND summary_status = 'approved');
