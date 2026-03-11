@@ -208,7 +208,7 @@ export default function Documents({ onNavigate }: { onNavigate: (p: string, id?:
                 {content && (
                     <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mt-8 space-y-5 overflow-hidden">
                         <div className="space-y-2">
-                            <label className={`text-[10px] font-black uppercase tracking-widest opacity-40 ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Document Title</label>
+                            <label className={`text-[10px] font-black uppercase tracking-widest opacity-40 ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{t.docTitle}</label>
                             <input className={`w-full p-5 rounded-2xl text-sm outline-none border transition-all font-bold ${theme === 'dark' ? 'bg-white/5 border-white/10 text-white focus:border-blue-500' : 'bg-white border-slate-200 text-slate-900 focus:border-blue-600'}`} value={title} onChange={e => setTitle(e.target.value)} />
                         </div>
 
@@ -220,8 +220,8 @@ export default function Documents({ onNavigate }: { onNavigate: (p: string, id?:
                                         <BookOpen size={18} />
                                     </div>
                                     <div>
-                                        <p className={`text-xs font-black uppercase tracking-tight ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Identify as Summary</p>
-                                        <p className="text-[8px] font-bold opacity-40 uppercase tracking-widest">Submit for Peer Library</p>
+                                        <p className={`text-xs font-black uppercase tracking-tight ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{t.isSummary}</p>
+                                        <p className="text-[8px] font-bold opacity-40 uppercase tracking-widest">{language === 'ar' ? 'إرسال إلى مكتبة الزملاء' : 'Submit for Peer Library'}</p>
                                     </div>
                                 </div>
                                 <div className={`w-12 h-6 rounded-full relative transition-all duration-300 ${isSummary ? 'bg-purple-600' : 'bg-slate-300'}`}>
@@ -238,8 +238,8 @@ export default function Documents({ onNavigate }: { onNavigate: (p: string, id?:
                                             <Users size={18} />
                                         </div>
                                         <div>
-                                            <p className={`text-xs font-black uppercase tracking-tight ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Make Public</p>
-                                            <p className="text-[8px] font-bold opacity-40 uppercase tracking-widest">Share with everyone</p>
+                                            <p className={`text-xs font-black uppercase tracking-tight ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{t.isPublic}</p>
+                                            <p className="text-[8px] font-bold opacity-40 uppercase tracking-widest">{language === 'ar' ? 'مشاركة مع الجميع' : 'Share with everyone'}</p>
                                         </div>
                                     </div>
                                     <div className={`w-12 h-6 rounded-full relative transition-all duration-300 ${isPublic ? 'bg-green-500' : 'bg-slate-300'}`}>
@@ -250,7 +250,7 @@ export default function Documents({ onNavigate }: { onNavigate: (p: string, id?:
                         )}
 
                         <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={saveToDB} className="w-full bg-blue-600 text-white py-5 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-xl">
-                            {isSummary ? 'Submit Summary' : t.commit}
+                            {isSummary ? t.submitSummary : t.commit}
                         </motion.button>
                     </motion.div>
                 )}
@@ -285,11 +285,11 @@ export default function Documents({ onNavigate }: { onNavigate: (p: string, id?:
                         <p className={`text-[10px] font-black uppercase opacity-30 mb-10 relative z-10 ${theme === 'dark' ? 'text-white' : 'text-slate-600'}`}>{doc.is_summary ? 'Summary Hub Fragment' : 'Document Fragment'}</p>
                         
                         <div className="grid grid-cols-2 md:grid-cols-5 gap-3 relative z-10">
-                            <button onClick={() => onNavigate('reader', doc.id)} className={`p-4 rounded-[1.5rem] transition-all flex flex-col items-center gap-2 ${theme === 'dark' ? 'bg-white/5 hover:bg-emerald-600' : 'bg-slate-100 hover:bg-emerald-600 hover:text-white'}`}><BookOpen size={18} /><span className="text-[9px] font-black uppercase">Read</span></button>
-                            <button onClick={() => onNavigate('chat', doc.id)} className={`p-4 rounded-[1.5rem] transition-all flex flex-col items-center gap-2 ${theme === 'dark' ? 'bg-white/5 hover:bg-blue-600' : 'bg-slate-100 hover:bg-blue-600 hover:text-white'}`}><MessageSquare size={18} /><span className="text-[9px] font-black uppercase">Chat</span></button>
-                            <button onClick={() => generateCards(doc)} className={`p-4 rounded-[1.5rem] transition-all flex flex-col items-center gap-2 ${theme === 'dark' ? 'bg-white/5 hover:bg-indigo-600' : 'bg-slate-100 hover:bg-indigo-600 hover:text-white'}`}><CreditCard size={18} /><span className="text-[9px] font-black uppercase">Cards</span></button>
-                            <button onClick={() => onNavigate('quizzes', doc.id)} className={`p-4 rounded-[1.5rem] transition-all flex flex-col items-center gap-2 ${theme === 'dark' ? 'bg-white/5 hover:bg-purple-600' : 'bg-slate-100 hover:bg-purple-600 hover:text-white'}`}><Brain size={18} /><span className="text-[9px] font-black uppercase">Quiz</span></button>
-                            <button onClick={() => generateNeuralSummary(doc)} className={`p-4 rounded-[1.5rem] transition-all flex flex-col items-center gap-2 ${theme === 'dark' ? 'bg-white/5 hover:bg-amber-600' : 'bg-slate-100 hover:bg-amber-600 hover:text-white'}`}><Sparkles size={18} /><span className="text-[9px] font-black uppercase">Auto</span></button>
+                            <button onClick={() => onNavigate('reader', doc.id)} className={`p-4 rounded-[1.5rem] transition-all flex flex-col items-center gap-2 ${theme === 'dark' ? 'bg-white/5 hover:bg-emerald-600' : 'bg-slate-100 hover:bg-emerald-600 hover:text-white'}`}><BookOpen size={18} /><span className="text-[9px] font-black uppercase">{t.read}</span></button>
+                            <button onClick={() => onNavigate('chat', doc.id)} className={`p-4 rounded-[1.5rem] transition-all flex flex-col items-center gap-2 ${theme === 'dark' ? 'bg-white/5 hover:bg-blue-600' : 'bg-slate-100 hover:bg-blue-600 hover:text-white'}`}><MessageSquare size={18} /><span className="text-[9px] font-black uppercase">{t.chat}</span></button>
+                            <button onClick={() => generateCards(doc)} className={`p-4 rounded-[1.5rem] transition-all flex flex-col items-center gap-2 ${theme === 'dark' ? 'bg-white/5 hover:bg-indigo-600' : 'bg-slate-100 hover:bg-indigo-600 hover:text-white'}`}><CreditCard size={18} /><span className="text-[9px] font-black uppercase">{t.cards}</span></button>
+                            <button onClick={() => onNavigate('quizzes', doc.id)} className={`p-4 rounded-[1.5rem] transition-all flex flex-col items-center gap-2 ${theme === 'dark' ? 'bg-white/5 hover:bg-purple-600' : 'bg-slate-100 hover:bg-purple-600 hover:text-white'}`}><Brain size={18} /><span className="text-[9px] font-black uppercase">{t.quiz}</span></button>
+                            <button onClick={() => generateNeuralSummary(doc)} className={`p-4 rounded-[1.5rem] transition-all flex flex-col items-center gap-2 ${theme === 'dark' ? 'bg-white/5 hover:bg-amber-600' : 'bg-slate-100 hover:bg-amber-600 hover:text-white'}`}><Sparkles size={18} /><span className="text-[9px] font-black uppercase">{t.auto}</span></button>
                         </div>
                         </motion.div>
                         ))}
@@ -297,7 +297,7 @@ export default function Documents({ onNavigate }: { onNavigate: (p: string, id?:
                 ) : (
                     <div className="col-span-full py-24 text-center">
                       <StudentLibrarian />
-                      <h3 className="text-3xl font-black italic uppercase tracking-tighter opacity-40 mt-8">Library Empty</h3>
+                      <h3 className={`text-3xl font-black italic uppercase tracking-tighter opacity-40 mt-8 ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{t.empty}</h3>
                     </div>
                 )}
             </div>

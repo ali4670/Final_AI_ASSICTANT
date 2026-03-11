@@ -23,7 +23,15 @@ export const translations = {
         resume: { title: "Neural CV", desc: "Architect your professional identity and resume." },
         graph: { title: "Neural Web", desc: "Explore the multidimensional connections between your data nodes." },
         mastery: { title: "Cognitive Map", desc: "3D visualization of your neural mastery and academic progress." },
-        trees: { title: "Botanical Registry", desc: "A 3D gallery of your biological focus achievements and biome growth." }
+        trees: { title: "Botanical Registry", desc: "A 3D gallery of your biological focus achievements and biome growth." },
+        public: { title: "Public Grid", desc: "Access and study from community shared knowledge nodes." },
+        themes: { title: "Environments", desc: "Customize your study atmosphere with smart themes." },
+        market: { title: "Neural Market", desc: "Redeem stars for virtual assets and upgrades." },
+        skills: { title: "Skill Tree", desc: "Visualize your cognitive evolution and unlock perks." },
+        planner: { title: "AI Planner", desc: "Auto-generate your weekly neural study roadmap." },
+        hub: { title: "Summary Hub", desc: "Explore peer-authored document summaries." },
+        social: { title: "Social Hub", desc: "Connect with students and share study materials." },
+        summaries: { title: "Neural Synthesis", desc: "Deep synthesis and structured analysis of your document fragments." }
       }
     },
     library: {
@@ -32,7 +40,31 @@ export const translations = {
       placeholder: "Search resources...",
       commit: "Commit to Database",
       empty: "Neural library empty",
-      emptyDesc: "Upload your first data fragment to begin the analysis process."
+      emptyDesc: "Upload your first data fragment to begin the analysis process.",
+      docTitle: "Document Title",
+      isSummary: "Identify as Summary",
+      isPublic: "Make Public",
+      submitSummary: "Submit Summary",
+      read: "Read",
+      chat: "Chat",
+      cards: "Cards",
+      quiz: "Quiz",
+      auto: "Auto"
+    },
+    chat: {
+      title: "AI SYNC",
+      back: "BACK TO COMMAND",
+      uplink: "Neural Uplink Initialized",
+      desc: "Establish high-bandwidth dialogue with the core synthesis engine.",
+      placeholder: "Transmit query or Sign...",
+      export: "Export Intelligence",
+      clearing: "Erase neural history for this fragment?",
+      online: "Neural Link Online",
+      accessibility: "Neural Accessibility",
+      voice: "Neural Voice",
+      signOutput: "Visual Sign Output",
+      signInput: "Sign Input",
+      apply: "Apply Configuration"
     },
     roadmap: {
       title: "Timeline",
@@ -69,7 +101,15 @@ export const translations = {
         resume: { title: "السيرة العصبية", desc: "هندسة هويتك المهنية وسيرتك الذاتية." },
         graph: { title: "الشبكة العصبية", desc: "استكشف الروابط متعددة الأبعاد بين عقد بياناتك." },
         mastery: { title: "الخريطة المعرفية", desc: "تصور ثلاثي الأبعاد لإتقانك العصبي وتقدمك الأكاديمي." },
-        trees: { title: "السجل النباتي", desc: "معرض ثلاثي الأبعاد لإنجازات تركيزك الحيوي ونمو البيئة الحيوية." }
+        trees: { title: "السجل النباتي", desc: "معرض ثلاثي الأبعاد لإنجازات تركيزك الحيوي ونمو البيئة الحيوية." },
+        public: { title: "الشبكة العامة", desc: "الوصول والدراسة من عقد المعرفة المشتركة من قبل المجتمع." },
+        themes: { title: "البيئات المحيطة", desc: "تخصيص جو الدراسة الخاص بك مع السمات الذكية." },
+        market: { title: "متجر نيورال", desc: "استبدل النجوم بالأصول الافتراضية والترقيات." },
+        skills: { title: "شجرة المهارات", desc: "تصور تطورك المعرفي وافتح المزايا." },
+        planner: { title: "مخطط الذكاء الاصطناعي", desc: "توليد خارطة الطريق الدراسية الأسبوعية تلقائياً." },
+        hub: { title: "مركز الملخصات", desc: "استكشف ملخصات المستندات التي كتبها زملاؤك." },
+        social: { title: "المركز الاجتماعي", desc: "تواصل مع الطلاب وشارك المواد الدراسية." },
+        summaries: { title: "التوليف العصبي", desc: "توليف عميق وتحليل منظم لقطع المستندات الخاصة بك." }
       }
     },
     library: {
@@ -78,7 +118,31 @@ export const translations = {
       placeholder: "البحث عن الموارد...",
       commit: "إيداع في قاعدة البيانات",
       empty: "المكتبة العصبية فارغة",
-      emptyDesc: "قم بتحميل أول قطعة بيانات لبدء عملية التحليل."
+      emptyDesc: "قم بتحميل أول قطعة بيانات لبدء عملية التحليل.",
+      docTitle: "عنوان المستند",
+      isSummary: "تحديد كملخص",
+      isPublic: "جعله عاماً",
+      submitSummary: "إرسال الملخص",
+      read: "قراءة",
+      chat: "دردشة",
+      cards: "بطاقات",
+      quiz: "اختبار",
+      auto: "تلقائي"
+    },
+    chat: {
+      title: "مزامنة الذكاء الاصطناعي",
+      back: "العودة إلى لوحة القيادة",
+      uplink: "تم بدء الاتصال العصبي",
+      desc: "أنشئ حواراً عالي النطاق مع محرك التوليف الأساسي.",
+      placeholder: "أرسل استفسارك أو إشارتك...",
+      export: "تصدير الذكاء",
+      clearing: "مسح التاريخ العصبي لهذه القطعة؟",
+      online: "الارتباط العصبي متصل",
+      accessibility: "إمكانية الوصول العصبية",
+      voice: "الصوت العصبي",
+      signOutput: "مخرج الإشارة المرئي",
+      signInput: "مدخل الإشارة",
+      apply: "تطبيق التكوين"
     },
     roadmap: {
       title: "الجدول الزمني",

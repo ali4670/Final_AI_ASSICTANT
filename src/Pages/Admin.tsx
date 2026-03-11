@@ -37,9 +37,9 @@ interface AdminProps {
 }
 
 const Admin: React.FC<AdminProps> = ({ onNavigate }) => {
-    // 1. Core Hooks (Fixed Order)
-    const auth = useAuth();
-    const { theme } = useTheme();
+    // 1. Core Hooks
+    const { isAdmin, user: currentUser, loading: authLoading } = useAuth();
+    const { theme, language } = useTheme();
     
     const [users, setUsers] = React.useState<UserProfile[]>([]);
     const [settings, setSettings] = React.useState<any[]>([]);
@@ -55,17 +55,59 @@ const Admin: React.FC<AdminProps> = ({ onNavigate }) => {
     const [isResetting, setIsResetting] = React.useState(false);
     const [toast, setToast] = React.useState<{ msg: string, type: 'success' | 'error' } | null>(null);
 
-    const isAdmin = auth?.isAdmin;
-    const currentUser = auth?.user;
+    const translations = {
+        en: {
+            title: 'Command Center',
+            subtitle: 'Oversight Interface',
+            units: 'Units',
+            fragments: 'Fragments',
+            alerts: 'Alerts',
+            support: 'Support',
+            search: 'Search units...',
+            terminate: 'Terminate',
+            promote: 'Promote',
+            demote: 'Demote',
+            stars: 'Stars',
+            keyReset: 'Key Reset',
+            params: 'Parameters',
+            brief: 'Brief',
+            summaries: 'Summaries',
+            accessRestricted: 'Access Restricted',
+            returnToGrid: 'Return to Grid',
+            establishingLink: 'Establishing Command Link'
+        },
+        ar: {
+            title: 'مركز القيادة',
+            subtitle: 'واجهة الإشراف',
+            units: 'الوحدات',
+            fragments: 'الشظايا',
+            alerts: 'التنبيهات',
+            support: 'الدعم',
+            search: 'بحث عن وحدات...',
+            terminate: 'إنهاء',
+            promote: 'ترقية',
+            demote: 'خفض رتبة',
+            stars: 'النجوم',
+            keyReset: 'إعادة تعيين المفتاح',
+            params: 'المعلمات',
+            brief: 'موجز',
+            summaries: 'الملخصات',
+            accessRestricted: 'الدخول مقيد',
+            returnToGrid: 'العودة إلى الشبكة',
+            establishingLink: 'إنشاء رابط القيادة'
+        }
+    };
+
+    const t = translations[language as keyof typeof translations] || translations.en;
 
     // 2. Effects
     React.useEffect(() => {
         if (isAdmin) {
             loadInitialData();
-        } else if (auth && !auth.loading) {
+        } else if (!authLoading) {
             setLoading(false);
         }
-    }, [isAdmin, auth?.loading]);
+    }, [isAdmin, authLoading]);
 
     const loadInitialData = async () => {
         try {
@@ -87,10 +129,8 @@ const Admin: React.FC<AdminProps> = ({ onNavigate }) => {
         if (!supabase) return;
         try {
             const { data: textSumms } = await supabase.from('user_summaries').select('*, profiles(username, email)').eq('status', 'pending');
-            // Safe query for documents
             const { data: docSumms } = await supabase.from('documents').select('id, title, created_at, user_id, is_summary, summary_status').eq('is_summary', true).eq('summary_status', 'pending');
             
-            // Map doc summaries with profile if available
             const docSummsWithMeta = await Promise.all((docSumms || []).map(async (d) => {
                 const { data: p } = await supabase.from('profiles').select('username, email').eq('id', d.user_id).single();
                 return { ...d, profiles: p, type: 'document' };
@@ -224,11 +264,11 @@ const Admin: React.FC<AdminProps> = ({ onNavigate }) => {
     };
 
     // 3. Render Checks
-    if (auth.loading) {
+    if (authLoading || (isAdmin && loading)) {
         return (
             <div className="min-h-screen flex flex-col items-center justify-center gap-6 bg-[#050505] text-white">
                 <Loader className="animate-spin text-red-500" size={48} />
-                <p className="text-[10px] font-black uppercase tracking-[0.6em] animate-pulse">Establishing Command Link</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.6em] animate-pulse">{t.establishingLink}</p>
             </div>
         );
     }
@@ -237,15 +277,14 @@ const Admin: React.FC<AdminProps> = ({ onNavigate }) => {
         return (
             <div className="min-h-screen flex flex-col items-center justify-center gap-6 bg-[#050505] text-white p-10 text-center">
                 <ShieldAlert size={64} className="text-red-500" />
-                <h2 className="text-2xl font-black uppercase tracking-widest text-red-500">Access Restricted</h2>
-                <button onClick={() => onNavigate('dashboard')} className="px-8 py-4 bg-white/5 border border-white/10 rounded-2xl font-black uppercase text-[10px]">Return to Grid</button>
+                <h2 className="text-2xl font-black uppercase tracking-widest text-red-500">{t.accessRestricted}</h2>
+                <button onClick={() => onNavigate('dashboard')} className="px-8 py-4 bg-white/5 border border-white/10 rounded-2xl font-black uppercase text-[10px]">{t.returnToGrid}</button>
             </div>
         );
     }
 
     return (
-        <div className={`min-h-screen pt-12 pb-20 px-6 md:px-12 transition-all duration-1000 relative overflow-hidden ${theme === 'dark' ? 'bg-[#020202] text-white' : 'bg-slate-50 text-slate-900'}`}>
-            {/* Cyber Grid Background */}
+        <div dir={language === 'ar' ? 'rtl' : 'ltr'} className={`min-h-screen pt-12 pb-20 px-6 md:px-12 transition-all duration-1000 relative overflow-hidden ${theme === 'dark' ? 'bg-[#020202] text-white' : 'bg-slate-50 text-slate-900'}`}>
             <div className={`absolute inset-0 pointer-events-none opacity-20 ${theme === 'dark' ? 'block' : 'hidden'}`}>
                 <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
                     <defs>
@@ -269,17 +308,17 @@ const Admin: React.FC<AdminProps> = ({ onNavigate }) => {
                 <header className="mb-12 flex flex-col md:flex-row justify-between items-center gap-8">
                     <div className="flex items-center gap-4">
                         <div className="w-16 h-16 bg-red-600 rounded-[1.5rem] flex items-center justify-center shadow-2xl rotate-3"><Shield className="text-white -rotate-3" size={32} /></div>
-                        <div><h1 className="text-5xl font-black italic uppercase tracking-tighter leading-none">Command Center</h1><p className="opacity-40 font-black uppercase tracking-[0.5em] text-[9px] mt-2">Oversight Interface</p></div>
+                        <div><h1 className="text-5xl font-black italic uppercase tracking-tighter leading-none">{t.title}</h1><p className="opacity-40 font-black uppercase tracking-[0.5em] text-[9px] mt-2">{t.subtitle}</p></div>
                     </div>
-                    <button onClick={() => onNavigate('dashboard')} className={`p-5 border rounded-3xl transition-all ${theme === 'dark' ? 'bg-white/5 border-white/10 hover:bg-white/10 text-white' : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-900'}`}><ArrowLeft size={24} /></button>
+                    <button onClick={() => onNavigate('dashboard')} className={`p-5 border rounded-3xl transition-all ${theme === 'dark' ? 'bg-white/5 border-white/10 hover:bg-white/10 text-white' : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-900'}`}><ArrowLeft className={language === 'ar' ? 'rotate-180' : ''} size={24} /></button>
                 </header>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
                     {[
-                        { label: 'Units', val: stats.totalUsers, icon: Users, color: 'blue' },
-                        { label: 'Fragments', val: stats.totalDocs, icon: FileText, color: 'purple' },
-                        { label: 'Alerts', val: pendingSummaries.length, icon: Activity, color: 'red' },
-                        { label: 'Support', val: supportMessages.filter(m => m.status === 'pending').length, icon: MessageSquare, color: 'amber' }
+                        { label: t.units, val: stats.totalUsers, icon: Users, color: 'blue' },
+                        { label: t.fragments, val: stats.totalDocs, icon: FileText, color: 'purple' },
+                        { label: t.alerts, val: pendingSummaries.length, icon: Activity, color: 'red' },
+                        { label: t.support, val: supportMessages.filter(m => m.status === 'pending').length, icon: MessageSquare, color: 'amber' }
                     ].map((s, i) => (
                         <div key={i} className={`p-8 rounded-[3rem] border ${theme === 'dark' ? 'bg-[#0D0D0D] border-white/5' : 'bg-white border-slate-100 shadow-xl'}`}>
                             <div className="flex items-center gap-4 mb-4"><s.icon className={`text-${s.color}-500`} size={20} /><span className="text-[10px] font-black uppercase tracking-widest opacity-40">{s.label}</span></div>
@@ -289,9 +328,9 @@ const Admin: React.FC<AdminProps> = ({ onNavigate }) => {
                 </div>
 
                 <div className="flex flex-wrap gap-3 mb-12 bg-white/5 border border-white/5 p-2 rounded-[2.5rem] backdrop-blur-xl">
-                    {[{id:'users',l:'Units',i:Users},{id:'summaries',l:'Summaries',i:FileText,b:pendingSummaries.length},{id:'support',l:'Support',i:MessageSquare},{id:'settings',l:'Params',i:Key},{id:'briefing',l:'Brief',i:Monitor}].map(t => (
-                        <button key={t.id} onClick={() => setActiveTab(t.id as any)} className={`px-8 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all flex items-center gap-3 relative ${activeTab === t.id ? 'bg-red-600 text-white shadow-2xl' : 'text-gray-500 hover:text-white hover:bg-white/5'}`}>
-                            <t.i size={16} />{t.l}{t.b ? <span className="absolute -top-2 -right-2 w-5 h-5 bg-white text-red-600 rounded-full flex items-center justify-center text-[8px] font-black">{t.b}</span> : null}
+                    {[{id:'users',l:t.units,i:Users},{id:'summaries',l:t.summaries,i:FileText,b:pendingSummaries.length},{id:'support',l:t.support,i:MessageSquare},{id:'settings',l:t.params,i:Key},{id:'briefing',l:t.brief,i:Monitor}].map(t_nav => (
+                        <button key={t_nav.id} onClick={() => setActiveTab(t_nav.id as any)} className={`px-8 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all flex items-center gap-3 relative ${activeTab === t_nav.id ? 'bg-red-600 text-white shadow-2xl' : 'text-gray-500 hover:text-white hover:bg-white/5'}`}>
+                            <t_nav.i size={16} />{t_nav.l}{t_nav.b ? <span className="absolute -top-2 -right-2 w-5 h-5 bg-white text-red-600 rounded-full flex items-center justify-center text-[8px] font-black">{t_nav.b}</span> : null}
                         </button>
                     ))}
                 </div>
@@ -299,19 +338,20 @@ const Admin: React.FC<AdminProps> = ({ onNavigate }) => {
                 <AnimatePresence mode="wait">
                     {activeTab === 'users' && (
                         <motion.div key="users" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="space-y-8">
-                            <div className="relative"><Search className="absolute left-6 top-1/2 -translate-y-1/2 text-gray-500" size={20} /><input placeholder="Search units..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className={`w-full py-7 pl-16 pr-8 rounded-[2.5rem] border outline-none font-black text-sm uppercase tracking-widest transition-all ${theme === 'dark' ? 'bg-[#0D0D0D] border-white/5 focus:border-red-500 shadow-2xl' : 'bg-white border-slate-200'}`} /></div>
+                            <div className="relative"><Search className={`absolute ${language === 'ar' ? 'right-6' : 'left-6'} top-1/2 -translate-y-1/2 text-gray-500`} size={20} /><input placeholder={t.search} value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className={`w-full py-7 ${language === 'ar' ? 'pr-16 pl-8' : 'pl-16 pr-8'} rounded-[2.5rem] border outline-none font-black text-sm uppercase tracking-widest transition-all ${theme === 'dark' ? 'bg-[#0D0D0D] border-white/5 focus:border-red-500 shadow-2xl' : 'bg-white border-slate-200'}`} /></div>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                {users.filter(u => u.email.toLowerCase().includes(searchQuery.toLowerCase())).map(u => (
+                                {/* FIX APPLIED BELOW ON LINE 224 */}
+                                {users.filter(u => (u.email || "").toLowerCase().includes((searchQuery || "").toLowerCase())).map(u => (
                                     <TiltCard key={u.id} className="p-8 rounded-[3.5rem] bg-white/5 border border-white/5 hover:border-red-500/30 transition-all relative">
                                         {u.is_admin && (
-                                            <div className="absolute top-6 right-6 p-2 bg-red-600/20 border border-red-500/30 rounded-xl text-red-500" title="Admin Unit">
+                                            <div className={`absolute top-6 ${language === 'ar' ? 'left-6' : 'right-6'} p-2 bg-red-600/20 border border-red-500/30 rounded-xl text-red-500`} title="Admin Unit">
                                                 <Shield size={14} />
                                             </div>
                                         )}
                                         <div className="flex items-center gap-4 mb-8"><div className="w-16 h-16 rounded-2xl bg-red-600/10 border border-red-500/20 flex items-center justify-center text-red-500 overflow-hidden">{u.avatar_url ? <img src={u.avatar_url} className="w-full h-full object-cover" /> : <UserCircle size={32} />}</div><div className="min-w-0"><h3 className="text-xl font-black italic truncate">{u.username || 'Unit'}</h3><p className="text-[10px] font-bold opacity-30 truncate">{u.email}</p></div></div>
                                         <div className="space-y-3 mb-8">
                                             <div className="flex justify-between items-center text-[9px] font-black uppercase tracking-widest opacity-40">
-                                                <span>Stars</span>
+                                                <span>{t.stars}</span>
                                                 <span className="text-amber-500">{u.stars_count}</span>
                                             </div>
                                             <div className="grid grid-cols-3 gap-2">
@@ -325,12 +365,11 @@ const Admin: React.FC<AdminProps> = ({ onNavigate }) => {
                                         </div>
 
                                         <div className="grid grid-cols-3 gap-3">
-                                            <button onClick={() => {setResettingUserId(u.id); setNewPassword('');}} className="py-4 bg-blue-500/10 text-blue-500 rounded-2xl font-black uppercase text-[9px] hover:bg-blue-500 hover:text-white transition-all">Key Reset</button>
+                                            <button onClick={() => {setResettingUserId(u.id); setNewPassword('');}} className="py-4 bg-blue-500/10 text-blue-500 rounded-2xl font-black uppercase text-[9px] hover:bg-blue-500 hover:text-white transition-all">{t.keyReset}</button>
                                             
-                                            {/* Only Ali can toggle admin status */}
                                             {currentUser?.email === 'aliopooopp3@gmail.com' ? (
                                                 <button onClick={() => handleToggleAdmin(u.id, u.is_admin)} className={`py-4 rounded-2xl font-black uppercase text-[9px] transition-all ${u.is_admin ? 'bg-amber-500/10 text-amber-500 hover:bg-amber-500 hover:text-white' : 'bg-purple-500/10 text-purple-500 hover:bg-purple-500 hover:text-white'}`}>
-                                                    {u.is_admin ? 'Demote' : 'Promote'}
+                                                    {u.is_admin ? t.demote : t.promote}
                                                 </button>
                                             ) : (
                                                 <div className="py-4 bg-white/5 rounded-2xl flex items-center justify-center opacity-20" title="Restricted to Super-Admin">
@@ -338,7 +377,7 @@ const Admin: React.FC<AdminProps> = ({ onNavigate }) => {
                                                 </div>
                                             )}
                                             
-                                            <button onClick={() => handleDeleteUser(u.id)} className="py-4 bg-red-500/10 text-red-500 rounded-2xl font-black uppercase text-[9px] hover:bg-red-500 hover:text-white transition-all">Terminate</button>
+                                            <button onClick={() => handleDeleteUser(u.id)} className="py-4 bg-red-500/10 text-red-500 rounded-2xl font-black uppercase text-[9px] hover:bg-red-500 hover:text-white transition-all">{t.terminate}</button>
                                         </div>
                                     </TiltCard>
                                 ))}

@@ -16,7 +16,7 @@ interface NavbarProps {
 
 const Navbar: React.FC<NavbarProps> = ({ onNavigate, currentPage }) => {
     const { user, profile, signOut, isAdmin } = useAuth();
-    const { theme, toggleTheme } = useTheme();
+    const { theme, toggleTheme, language, toggleLanguage } = useTheme();
     const [scrolled, setScrolled] = useState(false);
     const [isVisible, setIsVisible] = useState(true);
     const timeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -53,15 +53,46 @@ const Navbar: React.FC<NavbarProps> = ({ onNavigate, currentPage }) => {
         onNavigate('home');
     };
 
+    const translations = {
+        en: {
+            dashboard: 'Command',
+            documents: 'Library',
+            chat: 'Neural',
+            quizzes: 'Quiz',
+            marketplace: 'Market',
+            summaryHub: 'Hub',
+            social: 'Social',
+            admin: 'Admin',
+            level: 'Level',
+            core: 'CORE',
+            neural: 'NEURAL'
+        },
+        ar: {
+            dashboard: 'القيادة',
+            documents: 'المكتبة',
+            chat: 'الدردشة',
+            quizzes: 'الاختبارات',
+            marketplace: 'المتجر',
+            summaryHub: 'المركز',
+            social: 'اجتماعي',
+            admin: 'الإدارة',
+            level: 'المستوى',
+            core: 'الأساسي',
+            neural: 'عصبي'
+        }
+    };
+
+    const t = translations[language];
+
     const navItems = [
-        { id: 'dashboard', label: 'Command', icon: LayoutDashboard },
-        { id: 'documents', label: 'Library', icon: BookOpen },
-        { id: 'chat', label: 'Neural', icon: MessageSquare },
-        { id: 'quizzes', label: 'Quiz', icon: Brain },
-        { id: 'marketplace', label: 'Market', icon: ShoppingBag },
-        { id: 'summaryHub', label: 'Hub', icon: Sparkles },
-        { id: 'social', label: 'Social', icon: Users },
-        ...(isAdmin ? [{ id: 'admin', label: 'Admin', icon: Shield }] : []),
+        { id: 'dashboard', label: t.dashboard, icon: LayoutDashboard },
+        { id: 'documents', label: t.documents, icon: BookOpen },
+        { id: 'chat', label: t.chat, icon: MessageSquare },
+        { id: 'quizzes', label: t.quizzes, icon: Brain },
+        { id: 'marketplace', label: t.marketplace, icon: ShoppingBag },
+        { id: 'summaryHub', label: t.summaryHub, icon: Sparkles },
+        { id: 'social', label: t.social, icon: Users },
+        ...(isAdmin ? [{ id: 'admin', label: t.admin, icon: Shield }] : []),
     ];
 
     return (
@@ -89,7 +120,7 @@ const Navbar: React.FC<NavbarProps> = ({ onNavigate, currentPage }) => {
                 <motion.div 
                     whileHover={{ scale: 1.02 }}
                     onClick={() => onNavigate('dashboard')}
-                    className={`flex items-center gap-3 cursor-pointer group pr-6 border-r shrink-0 ${theme === 'dark' ? 'border-white/10' : 'border-slate-200'}`}
+                    className={`flex items-center gap-3 cursor-pointer group pr-6 border-r shrink-0 ${theme === 'dark' ? 'border-white/10' : 'border-slate-200'} ${language === 'ar' ? 'border-r-0 border-l pl-6 pr-0' : ''}`}
                 >
                     <div className="relative">
                         <div className={`absolute inset-0 rounded-xl blur-lg animate-pulse ${theme === 'dark' ? 'bg-blue-500/50' : 'bg-blue-400/30'}`} />
@@ -99,7 +130,7 @@ const Navbar: React.FC<NavbarProps> = ({ onNavigate, currentPage }) => {
                     </div>
                     <div className="hidden 2xl:block">
                         <span className={`text-base font-black italic tracking-tighter uppercase block leading-none ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
-                            NEURAL <span className="text-blue-500">CORE</span>
+                            {t.neural} <span className="text-blue-500">{t.core}</span>
                         </span>
                     </div>
                 </motion.div>
@@ -128,11 +159,11 @@ const Navbar: React.FC<NavbarProps> = ({ onNavigate, currentPage }) => {
                 </div>
 
                 {/* User Telemetry & Status */}
-                <div className={`flex items-center gap-4 pl-6 border-l shrink-0 ${theme === 'dark' ? 'border-white/10' : 'border-slate-200'}`}>
+                <div className={`flex items-center gap-4 pl-6 border-l shrink-0 ${theme === 'dark' ? 'border-white/10' : 'border-slate-200'} ${language === 'ar' ? 'border-l-0 border-r pl-0 pr-6' : ''}`}>
                     {/* Level & XP Bar */}
                     <div className="hidden md:flex flex-col items-end gap-1.5 min-w-[100px]">
                         <div className="flex items-center gap-2">
-                            <span className="text-[8px] font-black text-blue-500 uppercase tracking-widest">Level {profile?.level || 1}</span>
+                            <span className="text-[8px] font-black text-blue-500 uppercase tracking-widest">{t.level} {profile?.level || 1}</span>
                             <div className={`w-1 h-1 rounded-full ${theme === 'dark' ? 'bg-white/20' : 'bg-slate-300'}`} />
                             <span className={`text-[8px] font-black uppercase tracking-widest ${theme === 'dark' ? 'text-white/40' : 'text-slate-400'}`}>{profile?.xp || 0} XP</span>
                         </div>
@@ -163,6 +194,14 @@ const Navbar: React.FC<NavbarProps> = ({ onNavigate, currentPage }) => {
                     </motion.div>
 
                     <div className="flex items-center gap-2">
+                        <button 
+                            onClick={toggleLanguage} 
+                            className={`p-2 rounded-lg transition-all ${theme === 'dark' ? 'text-white/40 hover:text-white hover:bg-white/5' : 'text-slate-400 hover:text-blue-600 hover:bg-blue-50'}`}
+                            title={language === 'en' ? 'Arabic' : 'English'}
+                        >
+                            <Languages size={18} />
+                        </button>
+
                         <button 
                             onClick={toggleTheme} 
                             className={`p-2 rounded-lg transition-all ${theme === 'dark' ? 'text-white/40 hover:text-white hover:bg-white/5' : 'text-slate-400 hover:text-blue-600 hover:bg-blue-50'}`}

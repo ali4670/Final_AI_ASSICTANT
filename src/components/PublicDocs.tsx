@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { ArrowLeft, FileText, MessageSquare, CreditCard, Brain, Loader, Search, FileCode, Users, Sparkles, ChevronRight } from 'lucide-react';
+import { ArrowLeft, FileText, MessageSquare, CreditCard, Brain, Loader, Search, FileCode, Users, Sparkles, ChevronRight, BookOpen } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTheme } from '../contexts/ThemeContext';
 import { StudentLibrarian } from './AnimatedVisual';

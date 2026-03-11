@@ -15,6 +15,7 @@ import * as THREE from 'three';
 import { useNeuralVoice } from '../hooks/useNeuralVoice';
 import { ASL_ALPHABET } from '../lib/aslMapping';
 import SignLanguageInput from './SignLanguageInput';
+import { translations } from '../utils/translations';
 
 interface Message {
     role: 'user' | 'assistant' | 'system';
@@ -38,7 +39,8 @@ interface Document {
 
 export default function Chat({ onNavigate, documentId }: { onNavigate: (p: string, id?: string) => void, documentId?: string }) {
     const { user } = useAuth();
-    const { theme, useVoice, useSign, setUseVoice, setUseSign } = useTheme();
+    const { theme, language, useVoice, useSign, setUseVoice, setUseSign } = useTheme();
+    const t = translations[language].chat;
     const [documents, setDocuments] = useState<Document[]>([]);
     const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
     const [messages, setMessages] = useState<Message[]>([]);
@@ -199,7 +201,7 @@ export default function Chat({ onNavigate, documentId }: { onNavigate: (p: strin
 
     const clearChat = async () => {
         if (!user || !selectedDoc) return;
-        if (!confirm('Erase neural history for this fragment?')) return;
+        if (!confirm(t.clearing)) return;
         try {
             const { error } = await supabase.from('chat_history').delete().eq('user_id', user.id).eq('document_id', selectedDoc.id);
             if (error) throw error;
@@ -220,19 +222,19 @@ export default function Chat({ onNavigate, documentId }: { onNavigate: (p: strin
                         theme === 'dark' ? 'text-white' : 'text-slate-900'
                     }`}
                 >
-                    <ArrowLeft size={18} /> BACK TO COMMAND
+                    <ArrowLeft size={18} className={language === 'ar' ? 'rotate-180' : ''} /> {t.back}
                 </motion.button>
                 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center mb-24">
                     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
                         <div className="inline-flex items-center gap-3 px-5 py-2.5 rounded-full bg-blue-600/10 border border-blue-500/20 text-blue-500 mb-8">
                             <Activity size={16} className="animate-pulse" />
-                            <span className="text-[10px] font-black uppercase tracking-[0.4em]">Neural Uplink Initialized</span>
+                            <span className="text-[10px] font-black uppercase tracking-[0.4em]">{t.uplink}</span>
                         </div>
                         <h1 className={`text-7xl md:text-9xl font-black italic tracking-tighter uppercase mb-8 leading-none ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
-                            AI <br /> <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">SYNC</span>
+                            {t.title.split(' ')[0]} <br /> <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">{t.title.split(' ').slice(1).join(' ')}</span>
                         </h1>
-                        <p className={`text-xl font-bold opacity-40 leading-relaxed max-w-md uppercase tracking-widest ${theme === 'dark' ? 'text-white' : 'text-slate-600'}`}> Establish high-bandwidth dialogue with the core synthesis engine.</p>
+                        <p className={`text-xl font-bold opacity-40 leading-relaxed max-w-md uppercase tracking-widest ${theme === 'dark' ? 'text-white' : 'text-slate-600'}`}>{t.desc}</p>
                     </motion.div>
                     
                     <div className="h-[450px] relative">
@@ -259,7 +261,7 @@ export default function Chat({ onNavigate, documentId }: { onNavigate: (p: strin
                                 theme === 'dark' ? 'bg-[#0D0D0D] border-white/5 hover:border-blue-500/40 shadow-2xl' : 'bg-white border-slate-100 shadow-xl'
                             }`}
                         >
-                            <div className="flex justify-between items-start mb-12 relative z-10">
+                            <div className={`flex justify-between items-start mb-12 relative z-10 ${language === 'ar' ? 'flex-row-reverse' : ''}`}>
                                 <div className={`p-6 rounded-[2.5rem] transition-all duration-500 ${
                                     theme === 'dark' ? 'bg-blue-600/10 text-blue-400' : 'bg-blue-50 text-blue-600'
                                 } group-hover:bg-blue-600 group-hover:text-white`}>
@@ -267,8 +269,8 @@ export default function Chat({ onNavigate, documentId }: { onNavigate: (p: strin
                                 </div>
                                 <span className="text-[9px] font-black text-blue-600 uppercase tracking-widest bg-blue-600/5 px-3 py-1 rounded-full opacity-0 group-hover:opacity-100 transition-all">Link Engine</span>
                             </div>
-                            <h3 className="font-black italic uppercase tracking-tight text-3xl line-clamp-2 mb-4 relative z-10 transition-colors group-hover:text-blue-600 leading-tight">{doc.title}</h3>
-                            <p className="text-[10px] font-black opacity-30 uppercase tracking-[0.4em] relative z-10 mt-auto">Object Reference // Unit 0{i+1}</p>
+                            <h3 className={`font-black italic uppercase tracking-tight text-3xl line-clamp-2 mb-4 relative z-10 transition-colors group-hover:text-blue-600 leading-tight ${language === 'ar' ? 'text-right' : ''}`}>{doc.title}</h3>
+                            <p className={`text-[10px] font-black opacity-30 uppercase tracking-[0.4em] relative z-10 mt-auto ${language === 'ar' ? 'text-right' : ''}`}>Object Reference // Unit 0{i+1}</p>
                             
                             <div className="absolute -bottom-10 -right-10 opacity-[0.02] group-hover:opacity-[0.08] transition-all duration-1000 rotate-12">
                                 <MessageSquare size={280} />
@@ -281,7 +283,7 @@ export default function Chat({ onNavigate, documentId }: { onNavigate: (p: strin
     }
 
     return (
-        <div className={`flex flex-col h-[calc(100vh-140px)] relative z-10 transition-colors duration-700 ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+        <div dir={language === 'ar' ? 'rtl' : 'ltr'} className={`flex flex-col h-[calc(100vh-140px)] relative z-10 transition-colors duration-700 ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
             
             <div className="absolute inset-0 pointer-events-none opacity-10 z-0">
                 <Canvas shadows camera={{ position: [0, 0, 8], fov: 45 }}>
@@ -293,12 +295,12 @@ export default function Chat({ onNavigate, documentId }: { onNavigate: (p: strin
             <header className={`p-8 border-b flex justify-between items-center relative z-10 ${theme === 'dark' ? 'border-white/5 bg-black/40 backdrop-blur-3xl text-white' : 'border-slate-200 bg-white/80 backdrop-blur-xl text-slate-900'}`}>
                 <div className="flex items-center gap-8">
                     <motion.button 
-                        whileHover={{ scale: 1.1, x: -5 }}
+                        whileHover={{ scale: 1.1, x: language === 'ar' ? 5 : -5 }}
                         whileTap={{ scale: 0.9 }}
                         onClick={() => setSelectedDoc(null)}
                         className={`p-4 rounded-2xl border transition-all ${theme === 'dark' ? 'border-white/10 bg-white/5 hover:bg-white/10 text-white' : 'border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-900'}`}
                     >
-                        <ArrowLeft size={24} />
+                        <ArrowLeft size={24} className={language === 'ar' ? 'rotate-180' : ''} />
                     </motion.button>
                     <div>
                         <h2 className={`font-black italic tracking-tighter uppercase text-3xl line-clamp-1 max-w-[200px] md:max-w-xl leading-none mb-2 ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
@@ -310,7 +312,7 @@ export default function Chat({ onNavigate, documentId }: { onNavigate: (p: strin
                                     <div className="absolute inset-0 bg-blue-500 rounded-full animate-ping opacity-20" />
                                     <div className="absolute inset-0.5 bg-blue-500 rounded-full shadow-[0_0_10px_#3b82f6]" />
                                 </div>
-                                <span className="text-[9px] font-black text-blue-500 uppercase tracking-[0.5em]">Neural Link Online</span>
+                                <span className="text-[9px] font-black text-blue-500 uppercase tracking-[0.5em]">{t.online}</span>
                             </div>
                         </div>
                     </div>
@@ -326,7 +328,7 @@ export default function Chat({ onNavigate, documentId }: { onNavigate: (p: strin
                             ? 'bg-blue-600 border-blue-400 text-white shadow-[0_0_20px_rgba(37,99,235,0.4)]' 
                             : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10'
                         }`}
-                        title="Neural Accessibility"
+                        title={t.accessibility}
                     >
                         <Accessibility size={20} />
                     </motion.button>
@@ -343,7 +345,7 @@ export default function Chat({ onNavigate, documentId }: { onNavigate: (p: strin
                                 </option>
                             ))}
                         </select>
-                        <Bot size={14} className="absolute right-6 top-1/2 -translate-y-1/2 text-blue-500 pointer-events-none" />
+                        <Bot size={14} className={`absolute ${language === 'ar' ? 'left-6' : 'right-6'} top-1/2 -translate-y-1/2 text-blue-500 pointer-events-none`} />
                     </div>
 
                     <motion.button 
@@ -356,7 +358,7 @@ export default function Chat({ onNavigate, documentId }: { onNavigate: (p: strin
                         }`}
                     >
                         {exporting ? <Loader className="animate-spin" size={18} /> : <Printer size={18} />}
-                        <span className="hidden md:inline">Export Intelligence</span>
+                        <span className="hidden md:inline">{t.export}</span>
                     </motion.button>
                 </div>
             </header>
@@ -382,8 +384,8 @@ export default function Chat({ onNavigate, documentId }: { onNavigate: (p: strin
                                         ? 'bg-blue-600 text-white rounded-tr-none border-blue-500' 
                                         : (theme === 'dark' ? 'bg-white/[0.03] backdrop-blur-3xl text-gray-200 border-white/5 rounded-tl-none' : 'bg-white text-slate-900 border-slate-100 rounded-tl-none')
                                 }`}>
-                                    <div className="flex items-center gap-3 mb-4 opacity-30">
-                                        <span className="text-[9px] font-black uppercase tracking-[0.4em]">{m.role === 'user' ? 'Direct Transmission' : 'Neural Core Response'}</span>
+                                    <div className={`flex items-center gap-3 mb-4 opacity-30 ${language === 'ar' ? 'flex-row-reverse' : ''}`}>
+                                        <span className="text-[9px] font-black uppercase tracking-[0.4em]">{m.role === 'user' ? (language === 'ar' ? 'إرسال مباشر' : 'Direct Transmission') : (language === 'ar' ? 'استجابة النواة العصبية' : 'Neural Core Response')}</span>
                                     </div>
                                     <p className="font-medium whitespace-pre-wrap">{m.content}</p>
                                 </div>
@@ -397,7 +399,7 @@ export default function Chat({ onNavigate, documentId }: { onNavigate: (p: strin
                             <Loader className="animate-spin text-blue-500" size={28} />
                         </div>
                         <div className="px-10 py-6 rounded-full bg-white/5 text-[9px] font-black uppercase tracking-[0.4em] text-gray-400">
-                            Architecting Response...
+                            {language === 'ar' ? 'بناء الاستجابة...' : 'Architecting Response...'}
                         </div>
                     </motion.div>
                 )}
@@ -408,20 +410,20 @@ export default function Chat({ onNavigate, documentId }: { onNavigate: (p: strin
                 <form onSubmit={handleSubmit} className="max-w-6xl mx-auto flex gap-8">
                     <div className="relative flex-1 group">
                         <input 
-                            className={`w-full p-8 pl-24 rounded-[3.5rem] text-sm transition-all focus:ring-8 focus:ring-blue-500/5 outline-none border font-bold ${
+                            className={`w-full p-8 ${language === 'ar' ? 'pr-24 pl-8' : 'pl-24 pr-8'} rounded-[3.5rem] text-sm transition-all focus:ring-8 focus:ring-blue-500/5 outline-none border font-bold ${
                                 theme === 'dark' 
                                     ? 'bg-[#0D0D0D] border-white/10 text-white focus:border-blue-500 shadow-2xl' 
                                     : 'bg-slate-50 border-slate-200 text-slate-950 focus:border-blue-600 shadow-inner'
                             }`}
                             value={input} 
                             onChange={e => setInput(e.target.value)} 
-                            placeholder="Transmit query or Sign..." 
+                            placeholder={t.placeholder} 
                         />
                         
                         <button 
                             type="button"
                             onClick={() => setShowCamera(!showCamera)}
-                            className={`absolute left-4 top-1/2 -translate-y-1/2 p-4 rounded-full transition-all ${
+                            className={`absolute ${language === 'ar' ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 p-4 rounded-full transition-all ${
                                 showCamera ? 'bg-blue-600 text-white animate-pulse' : 'bg-white/5 text-gray-400 hover:text-blue-500'
                             }`}
                             title="Sign Language Input"
@@ -429,7 +431,7 @@ export default function Chat({ onNavigate, documentId }: { onNavigate: (p: strin
                             <Hand size={20} />
                         </button>
 
-                        <div className="absolute right-8 top-1/2 -translate-y-1/2 flex items-center gap-4">
+                        <div className={`absolute ${language === 'ar' ? 'left-8' : 'right-8'} top-1/2 -translate-y-1/2 flex items-center gap-4`}>
                             <Sparkles className="text-blue-500 opacity-20 group-focus-within:opacity-100 group-focus-within:animate-pulse transition-all" size={24} />
                         </div>
                     </div>
@@ -440,7 +442,7 @@ export default function Chat({ onNavigate, documentId }: { onNavigate: (p: strin
                         disabled={!input.trim() || loading}
                         className="bg-blue-600 text-white px-12 rounded-[3.5rem] transition-all shadow-xl shadow-blue-600/30 flex items-center justify-center group"
                     >
-                        <Send size={32} className="group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
+                        <Send size={32} className={`transition-transform ${language === 'ar' ? 'rotate-180 group-hover:-translate-x-1 group-hover:translate-y-1' : 'group-hover:translate-x-1 group-hover:-translate-y-1'}`} />
                     </motion.button>
                 </form>
             </div>
@@ -491,14 +493,14 @@ export default function Chat({ onNavigate, documentId }: { onNavigate: (p: strin
                         >
                             <button 
                                 onClick={() => setShowAccessMenu(false)}
-                                className="absolute top-8 right-8 p-3 bg-white/5 rounded-2xl hover:bg-white/10 transition-all opacity-40 hover:opacity-100"
+                                className={`absolute top-8 ${language === 'ar' ? 'left-8' : 'right-8'} p-3 bg-white/5 rounded-2xl hover:bg-white/10 transition-all opacity-40 hover:opacity-100`}
                             >
                                 <CloseIcon size={24} />
                             </button>
 
-                            <div className="mb-12">
-                                <h3 className="text-3xl font-black italic uppercase tracking-tighter mb-2">Accessibility</h3>
-                                <p className="text-[10px] font-black uppercase opacity-40 tracking-widest leading-relaxed">Neural Protocol for Inclusion and Support</p>
+                            <div className={`mb-12 ${language === 'ar' ? 'text-right' : 'text-left'}`}>
+                                <h3 className="text-3xl font-black italic uppercase tracking-tighter mb-2">{t.accessibility}</h3>
+                                <p className="text-[10px] font-black uppercase opacity-40 tracking-widest leading-relaxed">{language === 'ar' ? 'بروتوكول عصبي للإدماج والدعم' : 'Neural Protocol for Inclusion and Support'}</p>
                             </div>
 
                             <div className="space-y-6">
@@ -508,13 +510,13 @@ export default function Chat({ onNavigate, documentId }: { onNavigate: (p: strin
                                         useVoice ? 'border-blue-500 bg-blue-500/10' : 'border-white/5 bg-white/5 opacity-50'
                                     }`}
                                 >
-                                    <div className="flex items-center gap-6">
+                                    <div className={`flex items-center gap-6 ${language === 'ar' ? 'flex-row-reverse' : ''}`}>
                                         <div className={`p-4 rounded-2xl ${useVoice ? 'bg-blue-600 text-white' : 'bg-white/10 text-white'}`}>
                                             {useVoice ? <Volume2 size={24} /> : <VolumeX size={24} />}
                                         </div>
-                                        <div className="text-left">
-                                            <p className="font-black italic uppercase tracking-tight text-xl">Neural Voice</p>
-                                            <p className="text-[9px] font-black uppercase tracking-widest opacity-40">Text-to-Speech synthesis</p>
+                                        <div className={language === 'ar' ? 'text-right' : 'text-left'}>
+                                            <p className="font-black italic uppercase tracking-tight text-xl">{t.voice}</p>
+                                            <p className="text-[9px] font-black uppercase tracking-widest opacity-40">{language === 'ar' ? 'توليف النص إلى كلام' : 'Text-to-Speech synthesis'}</p>
                                         </div>
                                     </div>
                                     <div className={`w-3 h-3 rounded-full ${useVoice ? 'bg-blue-500 animate-pulse' : 'bg-white/10'}`} />
@@ -526,13 +528,13 @@ export default function Chat({ onNavigate, documentId }: { onNavigate: (p: strin
                                         useSign ? 'border-purple-500 bg-purple-500/10' : 'border-white/5 bg-white/5 opacity-50'
                                     }`}
                                 >
-                                    <div className="flex items-center gap-6">
+                                    <div className={`flex items-center gap-6 ${language === 'ar' ? 'flex-row-reverse' : ''}`}>
                                         <div className={`p-4 rounded-2xl ${useSign ? 'bg-purple-600 text-white' : 'bg-white/10 text-white'}`}>
                                             <Hand size={24} />
                                         </div>
-                                        <div className="text-left">
-                                            <p className="font-black italic uppercase tracking-tight text-xl">Visual Sign Output</p>
-                                            <p className="text-[9px] font-black uppercase tracking-widest opacity-40">Display ASL for AI Responses</p>
+                                        <div className={language === 'ar' ? 'text-right' : 'text-left'}>
+                                            <p className="font-black italic uppercase tracking-tight text-xl">{t.signOutput}</p>
+                                            <p className="text-[9px] font-black uppercase tracking-widest opacity-40">{language === 'ar' ? 'عرض لغة الإشارة لاستجابات الذكاء الاصطناعي' : 'Display ASL for AI Responses'}</p>
                                         </div>
                                     </div>
                                     <div className={`w-3 h-3 rounded-full ${useSign ? 'bg-purple-500 animate-pulse' : 'bg-white/10'}`} />
@@ -544,20 +546,20 @@ export default function Chat({ onNavigate, documentId }: { onNavigate: (p: strin
                                         showCamera ? 'border-cyan-500 bg-cyan-500/10' : 'border-white/5 bg-white/5 opacity-50'
                                     }`}
                                 >
-                                    <div className="flex items-center gap-6">
+                                    <div className={`flex items-center gap-6 ${language === 'ar' ? 'flex-row-reverse' : ''}`}>
                                         <div className={`p-4 rounded-2xl ${showCamera ? 'bg-cyan-600 text-white' : 'bg-white/10 text-white'}`}>
                                             <Camera size={24} />
                                         </div>
-                                        <div className="text-left">
-                                            <p className="font-black italic uppercase tracking-tight text-xl">Sign Input</p>
-                                            <p className="text-[9px] font-black uppercase tracking-widest opacity-40">Use camera for Sign Recognition</p>
+                                        <div className={language === 'ar' ? 'text-right' : 'text-left'}>
+                                            <p className="font-black italic uppercase tracking-tight text-xl">{t.signInput}</p>
+                                            <p className="text-[9px] font-black uppercase tracking-widest opacity-40">{language === 'ar' ? 'استخدام الكاميرا للتعرف على الإشارة' : 'Use camera for Sign Recognition'}</p>
                                         </div>
                                     </div>
                                     <div className={`w-3 h-3 rounded-full ${showCamera ? 'bg-cyan-500 animate-pulse' : 'bg-white/10'}`} />
                                 </button>
                                 
                                 <p className="text-[9px] font-bold text-center opacity-30 mt-4 uppercase tracking-widest">
-                                    Activate Sign Input to translate your gestures into text.
+                                    {language === 'ar' ? 'قم بتنشيط مدخل الإشارة لترجمة إيماءاتك إلى نص.' : 'Activate Sign Input to translate your gestures into text.'}
                                 </p>
                             </div>
                             
@@ -565,7 +567,7 @@ export default function Chat({ onNavigate, documentId }: { onNavigate: (p: strin
                                 onClick={() => setShowAccessMenu(false)}
                                 className="w-full mt-12 py-8 bg-white text-black rounded-[2.5rem] font-black uppercase text-[10px] tracking-[0.3em] hover:bg-gray-200 transition-all shadow-xl"
                             >
-                                Apply Configuration
+                                {t.apply}
                             </button>
                         </motion.div>
                     </motion.div>
@@ -579,7 +581,7 @@ export default function Chat({ onNavigate, documentId }: { onNavigate: (p: strin
                         initial={{ opacity: 0, scale: 0.5, y: 50 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.5, y: 50 }}
-                        className="fixed bottom-36 left-12 z-[150] w-48 h-64 bg-black/60 backdrop-blur-3xl border-2 border-purple-500/30 rounded-[3rem] p-8 flex flex-col items-center justify-center shadow-[0_0_50px_rgba(168,85,247,0.2)]"
+                        className={`fixed bottom-36 ${language === 'ar' ? 'right-12' : 'left-12'} z-[150] w-48 h-64 bg-black/60 backdrop-blur-3xl border-2 border-purple-500/30 rounded-[3rem] p-8 flex flex-col items-center justify-center shadow-[0_0_50px_rgba(168,85,247,0.2)]`}
                     >
                         <div className="text-[10px] font-black text-purple-400 uppercase tracking-widest mb-6">ASL Display</div>
                         <img 
